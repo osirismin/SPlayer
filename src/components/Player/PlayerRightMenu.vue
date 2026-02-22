@@ -106,6 +106,15 @@ import { openAutoClose, openChangeRate, openEqualizer, openABLoop } from "@/util
 import { useAudioManager } from "@/core/player/AudioManager";
 import type { DropdownOption } from "naive-ui";
 import { useQualityControl } from "@/composables/useQualityControl";
+import {
+  listenTogetherCheckRoom,
+  listenTogetherCreateRoom,
+  listenTogetherHeartbeat,
+  listenTogetherStatus,
+  listenTogetherSyncList,
+  type ListenTogetherPlayMode,
+  type ListenTogetherPlayStatus,
+} from "@/api/listenTogether";
 
 const dataStore = useDataStore();
 const statusStore = useStatusStore();
@@ -165,12 +174,98 @@ const controlsOptions = computed<DropdownOption[]>(() => [
     icon: renderIcon("Repeat"),
   },
   {
+    label: "一起听",
+    key: "listenTogether",
+    icon: renderIcon("Chat"),
+  },
+  {
     label: "播放速度",
     key: "rate",
     disabled: !audioManager.capabilities.supportsRate,
     icon: renderIcon("PlayRate"),
   },
 ]);
+
+const getListenTogetherPlayMode = (): ListenTogetherPlayMode => {
+  if (statusStore.shuffleMode !== "off") {
+    return "RANDOM";
+  }
+  if (statusStore.repeatMode === "one") {
+    return "SINGLE_LOOP";
+  }
+  return "ORDER_LOOP";
+};
+
+const testListenTogetherFlow = async () => {
+  const songId = Number(musicStore.playSong.id);
+  const userId = Number(dataStore.userData.userId);
+  const playStatus: ListenTogetherPlayStatus = statusStore.playStatus ? "PLAY" : "PAUSE";
+  const progress = Math.max(0, Math.floor(statusStore.currentTime * 1000));
+  const playMode = getListenTogetherPlayMode();
+  const listIds = dataStore.playList.map((s) => s.id).filter((id) => typeof id === "number");
+  const displayList = listIds.join(",");
+  const randomList = playMode === "RANDOM" ? displayList : undefined;
+
+  console.log("[一起听] 0/开始测试", {
+    userId,
+    songId,
+    playStatus,
+    progress,
+    playMode,
+    listCount: listIds.length,
+  });
+
+  try {
+    console.log("[一起听] 1/创建房间 请求");
+    const roomRes = await listenTogetherCreateRoom();
+    console.log("[一起听] 1/创建房间 响应", roomRes);
+
+    const roomId = roomRes?.roomInfo?.roomId;
+    const inviterId = roomRes?.roomInfo?.creatorId ?? userId;
+
+    if (!roomId) {
+      console.warn("[一起听] 创建房间未返回 roomId，流程终止");
+      return;
+    }
+
+    const shareUrl = `https://st.music.163.com/listen-together/share/?songId=${songId}&roomId=${roomId}&inviterId=${inviterId}`;
+    console.log("[一起听] 2/房间链接", { shareUrl, roomId, inviterId });
+
+    console.log("[一起听] 3/获取房间情况 请求", { roomId });
+    const checkRes = await listenTogetherCheckRoom(roomId);
+    console.log("[一起听] 3/获取房间情况 响应", checkRes);
+
+    console.log("[一起听] 4/获取一起听状态 请求");
+    const statusRes = await listenTogetherStatus();
+    console.log("[一起听] 4/获取一起听状态 响应", statusRes);
+
+    console.log("[一起听] 5/发送播放列表信息 请求", {
+      roomId,
+      commandType: "REPLACE",
+      version: { userId, version: Date.now() },
+      playMode,
+      randomList,
+      displayList,
+    });
+    const syncRes = await listenTogetherSyncList({
+      roomId,
+      commandType: "REPLACE",
+      version: { userId, version: Date.now() },
+      playMode,
+      randomList,
+      displayList,
+    });
+    console.log("[一起听] 5/发送播放列表信息 响应", syncRes);
+
+    console.log("[一起听] 6/一起听心跳包 请求", { roomId, songId, playStatus, progress });
+    const heartbeatRes = await listenTogetherHeartbeat({ roomId, songId, playStatus, progress });
+    console.log("[一起听] 6/一起听心跳包 响应", heartbeatRes);
+
+    console.log("[一起听] 7/结束房间 跳过", { roomId });
+  } catch (error: unknown) {
+    console.error("[一起听] 测试流程失败", error);
+  }
+};
 
 // 更多功能选择
 const handleControls = (key: string) => {
@@ -187,6 +282,9 @@ const handleControls = (key: string) => {
       break;
     case "abLoop":
       openABLoop();
+      break;
+    case "listenTogether":
+      void testListenTogetherFlow();
       break;
     case "rate":
       openChangeRate();
