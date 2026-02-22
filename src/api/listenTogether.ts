@@ -5,12 +5,17 @@ export interface ListenTogetherRoomInfo {
   roomId: string;
 }
 
-export interface ListenTogetherCreateRoomResponse {
+export interface ListenTogetherCreateRoomData {
   type?: string;
   roomInfo?: ListenTogetherRoomInfo;
-  code?: number;
-  data?: unknown;
-  message?: string;
+  hintText?: string | null;
+  toastText?: string | null;
+}
+
+export interface ListenTogetherCreateRoomResponse {
+  code: number;
+  data: ListenTogetherCreateRoomData;
+  message: string;
 }
 
 export const listenTogetherCreateRoom = () => {

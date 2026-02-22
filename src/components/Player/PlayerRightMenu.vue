@@ -220,8 +220,8 @@ const testListenTogetherFlow = async () => {
     const roomRes = await listenTogetherCreateRoom();
     console.log("[一起听] 1/创建房间 响应", roomRes);
 
-    const roomId = roomRes?.roomInfo?.roomId;
-    const inviterId = roomRes?.roomInfo?.creatorId ?? userId;
+    const roomId = roomRes?.data?.roomInfo?.roomId;
+    const inviterId = roomRes?.data?.roomInfo?.creatorId ?? userId;
 
     if (!roomId) {
       console.warn("[一起听] 创建房间未返回 roomId，流程终止");
