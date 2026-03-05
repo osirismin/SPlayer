@@ -37,6 +37,14 @@ export const parseAdvancedSearchQuery = (query: LocationQuery): AdvancedSearchQu
   const album = toOptionalString(query.album);
   const minDuration = toOptionalNumber(query.minDuration);
   const maxDuration = toOptionalNumber(query.maxDuration);
+  const inPath = toOptionalString(query.inPath);
+  const path = toOptionalString(query.path);
+  const minBitrate = toOptionalNumber(query.minBitrate);
+  const maxBitrate = toOptionalNumber(query.maxBitrate);
+  const minSize = toOptionalNumber(query.minSize);
+  const maxSize = toOptionalNumber(query.maxSize);
+  const minTrackNumber = toOptionalNumber(query.minTrackNumber);
+  const maxTrackNumber = toOptionalNumber(query.maxTrackNumber);
 
   return {
     mode,
@@ -47,6 +55,14 @@ export const parseAdvancedSearchQuery = (query: LocationQuery): AdvancedSearchQu
     album,
     minDuration,
     maxDuration,
+    inPath,
+    path,
+    minBitrate,
+    maxBitrate,
+    minSize,
+    maxSize,
+    minTrackNumber,
+    maxTrackNumber,
   };
 };
 
@@ -64,7 +80,35 @@ export const buildAdvancedSearchRouteQuery = (q: AdvancedSearchQuery) => {
   if (typeof q.maxDuration === "number" && Number.isFinite(q.maxDuration)) {
     query.maxDuration = String(q.maxDuration);
   }
+  if (q.inPath?.trim()) query.inPath = q.inPath.trim();
+  if (q.path?.trim()) query.path = q.path.trim();
+  if (typeof q.minBitrate === "number" && Number.isFinite(q.minBitrate)) {
+    query.minBitrate = String(q.minBitrate);
+  }
+  if (typeof q.maxBitrate === "number" && Number.isFinite(q.maxBitrate)) {
+    query.maxBitrate = String(q.maxBitrate);
+  }
+  if (typeof q.minSize === "number" && Number.isFinite(q.minSize)) {
+    query.minSize = String(q.minSize);
+  }
+  if (typeof q.maxSize === "number" && Number.isFinite(q.maxSize)) {
+    query.maxSize = String(q.maxSize);
+  }
+  if (typeof q.minTrackNumber === "number" && Number.isFinite(q.minTrackNumber)) {
+    query.minTrackNumber = String(q.minTrackNumber);
+  }
+  if (typeof q.maxTrackNumber === "number" && Number.isFinite(q.maxTrackNumber)) {
+    query.maxTrackNumber = String(q.maxTrackNumber);
+  }
   return query;
+};
+
+const formatPathLabel = (p: string) => {
+  const v = p.trim();
+  if (!v) return "";
+  const sep = v.includes("\\") ? "\\" : "/";
+  const name = v.split(sep).filter(Boolean).pop();
+  return name ? name : v;
 };
 
 export const formatAdvancedSearchSummary = (q: AdvancedSearchQuery) => {
@@ -78,6 +122,28 @@ export const formatAdvancedSearchSummary = (q: AdvancedSearchQuery) => {
   }
   if (typeof q.maxDuration === "number" && Number.isFinite(q.maxDuration)) {
     parts.push(`时长≤${Math.round(q.maxDuration / 1000)}s`);
+  }
+  if (q.mode === "local") {
+    if (q.inPath?.trim()) parts.push(`目录:${formatPathLabel(q.inPath)}`);
+    if (q.path?.trim()) parts.push(`路径:${q.path.trim()}`);
+    if (typeof q.minBitrate === "number" && Number.isFinite(q.minBitrate)) {
+      parts.push(`码率≥${Math.round(q.minBitrate / 1000)}kbps`);
+    }
+    if (typeof q.maxBitrate === "number" && Number.isFinite(q.maxBitrate)) {
+      parts.push(`码率≤${Math.round(q.maxBitrate / 1000)}kbps`);
+    }
+    if (typeof q.minSize === "number" && Number.isFinite(q.minSize)) {
+      parts.push(`大小≥${Math.round(q.minSize / 1024 / 1024)}MB`);
+    }
+    if (typeof q.maxSize === "number" && Number.isFinite(q.maxSize)) {
+      parts.push(`大小≤${Math.round(q.maxSize / 1024 / 1024)}MB`);
+    }
+    if (typeof q.minTrackNumber === "number" && Number.isFinite(q.minTrackNumber)) {
+      parts.push(`曲序≥${q.minTrackNumber}`);
+    }
+    if (typeof q.maxTrackNumber === "number" && Number.isFinite(q.maxTrackNumber)) {
+      parts.push(`曲序≤${q.maxTrackNumber}`);
+    }
   }
   return parts.length ? parts.join(" · ") : "未设置条件";
 };
@@ -133,4 +199,3 @@ export const filterSongsByAdvancedQuery = (songs: SongType[], q: AdvancedSearchQ
     return true;
   });
 };
-

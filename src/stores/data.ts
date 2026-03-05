@@ -514,6 +514,28 @@ export const useDataStore = defineStore("data", {
           typeof query.maxDuration === "number" && Number.isFinite(query.maxDuration)
             ? query.maxDuration
             : undefined,
+        inPath: query.inPath?.trim() || undefined,
+        path: query.path?.trim() || undefined,
+        minBitrate:
+          typeof query.minBitrate === "number" && Number.isFinite(query.minBitrate)
+            ? query.minBitrate
+            : undefined,
+        maxBitrate:
+          typeof query.maxBitrate === "number" && Number.isFinite(query.maxBitrate)
+            ? query.maxBitrate
+            : undefined,
+        minSize:
+          typeof query.minSize === "number" && Number.isFinite(query.minSize) ? query.minSize : undefined,
+        maxSize:
+          typeof query.maxSize === "number" && Number.isFinite(query.maxSize) ? query.maxSize : undefined,
+        minTrackNumber:
+          typeof query.minTrackNumber === "number" && Number.isFinite(query.minTrackNumber)
+            ? query.minTrackNumber
+            : undefined,
+        maxTrackNumber:
+          typeof query.maxTrackNumber === "number" && Number.isFinite(query.maxTrackNumber)
+            ? query.maxTrackNumber
+            : undefined,
       };
 
       const key = JSON.stringify(normalized);

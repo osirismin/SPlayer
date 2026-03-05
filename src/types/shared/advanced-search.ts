@@ -11,9 +11,16 @@ export interface AdvancedSearchQuery {
   album?: string;
   minDuration?: number;
   maxDuration?: number;
+  inPath?: string;
+  path?: string;
+  minBitrate?: number;
+  maxBitrate?: number;
+  minSize?: number;
+  maxSize?: number;
+  minTrackNumber?: number;
+  maxTrackNumber?: number;
 }
 
 export const ADVANCED_SEARCH_IPC_CHANNELS = {
   LOCAL_ADVANCED_SEARCH: "local-music:advanced-search",
 } as const;
-

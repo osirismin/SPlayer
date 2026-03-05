@@ -34,7 +34,15 @@ const appRoutes: Array<RouteRecordRaw> = [
         !!to.query.artist ||
         !!to.query.album ||
         !!to.query.minDuration ||
-        !!to.query.maxDuration;
+        !!to.query.maxDuration ||
+        !!to.query.inPath ||
+        !!to.query.path ||
+        !!to.query.minBitrate ||
+        !!to.query.maxBitrate ||
+        !!to.query.minSize ||
+        !!to.query.maxSize ||
+        !!to.query.minTrackNumber ||
+        !!to.query.maxTrackNumber;
       if (!hasAny) {
         next({ path: "/403" });
         return;
