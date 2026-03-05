@@ -14,6 +14,7 @@ import { cloneDeep, isEmpty } from "lodash-es";
 import { isLogin } from "@/utils/auth";
 import { formatCategoryList } from "@/utils/format";
 import localforage from "localforage";
+import type { AdvancedSearchQuery } from "@shared";
 
 interface ListState {
   playList: SongType[];
@@ -21,6 +22,7 @@ interface ListState {
   historyList: SongType[];
   cloudPlayList: SongType[];
   searchHistory: string[];
+  advancedSearchHistory: AdvancedSearchQuery[];
   localPlayList: CoverType[];
   userLoginStatus: boolean;
   loginType: LoginType;
@@ -86,6 +88,8 @@ export const useDataStore = defineStore("data", {
     historyList: [],
     // 搜索历史
     searchHistory: [],
+    // 高级搜索历史
+    advancedSearchHistory: [],
     // 本地歌单
     localPlayList: [],
     // 云盘歌单
@@ -494,6 +498,37 @@ export const useDataStore = defineStore("data", {
         this.downloadingSongs = [...this.downloadingSongs];
       }
     },
+    addAdvancedSearchHistory(query: AdvancedSearchQuery) {
+      const normalized: AdvancedSearchQuery = {
+        mode: query.mode,
+        match: query.match,
+        keywords: query.keywords?.trim() || undefined,
+        title: query.title?.trim() || undefined,
+        artist: query.artist?.trim() || undefined,
+        album: query.album?.trim() || undefined,
+        minDuration:
+          typeof query.minDuration === "number" && Number.isFinite(query.minDuration)
+            ? query.minDuration
+            : undefined,
+        maxDuration:
+          typeof query.maxDuration === "number" && Number.isFinite(query.maxDuration)
+            ? query.maxDuration
+            : undefined,
+      };
+
+      const key = JSON.stringify(normalized);
+      const index = this.advancedSearchHistory.findIndex((q) => JSON.stringify(q) === key);
+      if (index !== -1) {
+        this.advancedSearchHistory.splice(index, 1);
+      }
+      this.advancedSearchHistory.unshift(normalized);
+      if (this.advancedSearchHistory.length > 30) {
+        this.advancedSearchHistory.length = 30;
+      }
+    },
+    clearAdvancedSearchHistory() {
+      this.advancedSearchHistory = [];
+    },
     /**
      * 保存背景图
      * @param blob 图片 Blob 数据
@@ -535,6 +570,14 @@ export const useDataStore = defineStore("data", {
   persist: {
     key: "data-store",
     storage: localStorage,
-    pick: ["userLoginStatus", "loginType", "userData", "userList", "searchHistory", "catData"],
+    pick: [
+      "userLoginStatus",
+      "loginType",
+      "userData",
+      "userList",
+      "searchHistory",
+      "advancedSearchHistory",
+      "catData",
+    ],
   },
 });

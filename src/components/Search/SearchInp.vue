@@ -18,6 +18,13 @@
       <template #prefix>
         <SvgIcon :size="18" name="Search" />
       </template>
+      <template #suffix>
+        <n-button :focusable="false" quaternary size="tiny" @click.stop="openAdvancedSearch">
+          <template #icon>
+            <SvgIcon :size="16" name="SettingsLine" />
+          </template>
+        </n-button>
+      </template>
     </n-input>
     <!-- 搜索框遮罩 -->
     <Transition name="fade" mode="out-in">
@@ -29,6 +36,7 @@
     <SearchSuggest @to-search="toSearch" />
     <!-- 右键菜单 -->
     <SearchInpMenu ref="searchInpMenuRef" @to-search="toSearch" />
+    <SearchAdvanced v-model:show="advancedSearchShow" @submit="toAdvancedSearch" />
   </div>
 </template>
 
@@ -39,6 +47,13 @@ import { usePlayerController } from "@/core/player/PlayerController";
 import { songDetail } from "@/api/song";
 import { formatSongsList } from "@/utils/format";
 import SearchInpMenu from "@/components/Menu/SearchInpMenu.vue";
+import SearchAdvanced from "@/components/Search/SearchAdvanced.vue";
+import {
+  buildAdvancedSearchRouteQuery,
+  formatAdvancedSearchSummary,
+  parseAdvancedSearchQuery,
+} from "@/utils/advancedSearch";
+import type { AdvancedSearchQuery } from "@shared";
 
 const router = useRouter();
 const route = useRoute();
@@ -56,6 +71,7 @@ const searchPlaceholder = ref<string>(
   settingStore.useOnlineService ? "搜索音乐 / 视频" : "搜索本地音乐",
 );
 const searchRealkeyword = ref<string>("");
+const advancedSearchShow = ref(false);
 
 // 搜索框输入限制
 const noSideSpace = (value: string) => !value.startsWith(" ");
@@ -69,7 +85,16 @@ const searchInputToFocus = () => {
 // 根据路由更新搜索框内容
 const syncSearchInput = () => {
   // 如果当前是搜索页，则同步搜索页的搜索词到搜索框，如果是其他页面，则清空搜索框
-  if (String(route.name).startsWith("search") && route.query.keyword) {
+  if (!String(route.name).startsWith("search")) {
+    statusStore.searchInputValue = "";
+    return;
+  }
+  if (route.query.advanced === "1" || route.query.advanced === "true") {
+    const q = parseAdvancedSearchQuery(route.query);
+    statusStore.searchInputValue = formatAdvancedSearchSummary(q);
+    return;
+  }
+  if (route.query.keyword) {
     statusStore.searchInputValue = String(route.query.keyword);
   } else {
     statusStore.searchInputValue = "";
@@ -91,6 +116,23 @@ const closeSearchFocus = () => {
     default:
       break;
   }
+};
+
+const openAdvancedSearch = () => {
+  statusStore.searchFocus = false;
+  searchInputRef.value?.blur();
+  advancedSearchShow.value = true;
+};
+
+const toAdvancedSearch = (query: AdvancedSearchQuery) => {
+  statusStore.searchFocus = false;
+  searchInputRef.value?.blur();
+  advancedSearchShow.value = false;
+  dataStore.addAdvancedSearchHistory(query);
+  router.push({
+    name: "search",
+    query: buildAdvancedSearchRouteQuery(query),
+  });
 };
 
 // 添加搜索历史
@@ -140,10 +182,13 @@ const toSearch = async (key: any, type: string = "keyword") => {
   }
   // 本地搜索
   if (!settingStore.useOnlineService) {
-    // 跳转本地搜索页面
     router.push({
       name: "search",
-      query: { keyword: key },
+      query: buildAdvancedSearchRouteQuery({
+        mode: "local",
+        match: "contains",
+        keywords: String(key ?? "").trim(),
+      }),
     });
     return;
   }
