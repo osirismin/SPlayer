@@ -1,6 +1,7 @@
 import Database from "better-sqlite3";
 import { existsSync } from "node:fs";
 import { readFile, rename } from "node:fs/promises";
+import type { AdvancedSearchMatch, AdvancedSearchQuery } from "@shared";
 
 /** 列定义接口 */
 interface ColumnDef {
@@ -40,6 +41,55 @@ const INDEXES: Record<string, string[]> = {
   // path 已有 UNIQUE 约束，无需额外索引
   idx_tracks_artist: ["artist"],
   idx_tracks_album: ["album"],
+  idx_tracks_title: ["title"],
+};
+
+const escapeLike = (s: string) => s.replace(/\^/g, "^^").replace(/%/g, "^%").replace(/_/g, "^_");
+
+const normalizeInput = (s: string) => s.trim();
+
+const buildAdvancedSearchWhere = (query: AdvancedSearchQuery) => {
+  const where: string[] = [];
+  const params: unknown[] = [];
+
+  const match: AdvancedSearchMatch = query.match ?? "contains";
+
+  const addTextCondition = (column: string, value: string) => {
+    const v = normalizeInput(value);
+    if (!v) return;
+    if (match === "exact") {
+      where.push(`COALESCE(${column}, '') = ?`);
+      params.push(v);
+      return;
+    }
+    where.push(`COALESCE(${column}, '') LIKE ? ESCAPE '^'`);
+    params.push(`%${escapeLike(v)}%`);
+  };
+
+  addTextCondition("title", query.title ?? "");
+  addTextCondition("artist", query.artist ?? "");
+  addTextCondition("album", query.album ?? "");
+
+  const keywords = normalizeInput(query.keywords ?? "");
+  if (keywords) {
+    where.push(
+      "(COALESCE(title,'') LIKE ? ESCAPE '^' OR COALESCE(artist,'') LIKE ? ESCAPE '^' OR COALESCE(album,'') LIKE ? ESCAPE '^' OR COALESCE(path,'') LIKE ? ESCAPE '^')",
+    );
+    const like = `%${escapeLike(keywords)}%`;
+    params.push(like, like, like, like);
+  }
+
+  if (typeof query.minDuration === "number" && Number.isFinite(query.minDuration)) {
+    where.push("duration >= ?");
+    params.push(query.minDuration);
+  }
+  if (typeof query.maxDuration === "number" && Number.isFinite(query.maxDuration)) {
+    where.push("duration <= ?");
+    params.push(query.maxDuration);
+  }
+
+  const clause = where.length ? `WHERE ${where.join(" AND ")}` : "";
+  return { clause, params };
 };
 
 /** 音乐数据接口 */
@@ -304,13 +354,33 @@ export class LocalMusicDB {
     const unixBase = pathWithSep.replace(/\\/g, "/");
     const winBase = pathWithSep.replace(/\//g, "\\");
     // 转义 LIKE 通配符（使用 ^ 作为转义字符，同时转义 ^ 本身）
-    const escapeLike = (s: string) =>
-      s.replace(/\^/g, "^^").replace(/%/g, "^%").replace(/_/g, "^_");
     const unixPath = escapeLike(unixBase) + "%";
     const winPath = escapeLike(winBase) + "%";
     // 使用 OR 查询并指定 ESCAPE 字符
     return this.db
       .prepare("SELECT * FROM tracks WHERE path LIKE ? ESCAPE '^' OR path LIKE ? ESCAPE '^'")
       .all(unixPath, winPath) as MusicTrack[];
+  }
+
+  public countTracksByAdvancedQuery(query: AdvancedSearchQuery): number {
+    if (!this.db) return 0;
+    const { clause, params } = buildAdvancedSearchWhere(query);
+    const row = this.db
+      .prepare(`SELECT COUNT(*) as count FROM tracks ${clause}`)
+      .get(...params) as { count: number } | undefined;
+    return row?.count ?? 0;
+  }
+
+  public searchTracksByAdvancedQuery(query: AdvancedSearchQuery, limit: number, offset: number) {
+    if (!this.db) return [];
+    const safeLimit = Number.isFinite(limit) && limit > 0 ? Math.min(limit, 500) : 50;
+    const safeOffset = Number.isFinite(offset) && offset >= 0 ? offset : 0;
+
+    const { clause, params } = buildAdvancedSearchWhere(query);
+    return this.db
+      .prepare(
+        `SELECT * FROM tracks ${clause} ORDER BY mtime DESC, title ASC LIMIT ? OFFSET ?`,
+      )
+      .all(...params, safeLimit, safeOffset) as MusicTrack[];
   }
 }

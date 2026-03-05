@@ -9,6 +9,7 @@ import { MusicMetadataService } from "../services/MusicMetadataService";
 import { useStore } from "../store";
 import { chunkArray } from "../utils/helper";
 import { processMusicList } from "../utils/format";
+import { ADVANCED_SEARCH_IPC_CHANNELS, type AdvancedSearchQuery } from "@shared";
 
 /** 本地音乐服务 */
 const localMusicService = new LocalMusicService();
@@ -222,6 +223,21 @@ const initFileIpc = (): void => {
 
   // 本地音乐同步（批量流式传输）
   ipcMain.handle("local-music-sync", handleLocalMusicSync);
+
+  ipcMain.handle(
+    ADVANCED_SEARCH_IPC_CHANNELS.LOCAL_ADVANCED_SEARCH,
+    async (_event, payload: { query: AdvancedSearchQuery; limit?: number; offset?: number }) => {
+      const coverDir = getCoverDir();
+      const limit = typeof payload.limit === "number" ? payload.limit : 50;
+      const offset = typeof payload.offset === "number" ? payload.offset : 0;
+      const { items, total, hasMore } = await localMusicService.advancedSearchTracks(
+        payload.query,
+        limit,
+        offset,
+      );
+      return { items: processMusicList(items, coverDir), total, hasMore };
+    },
+  );
 
   // 获取已下载音乐
   ipcMain.handle("get-downloaded-songs", async (_event, dirPath: string) => {

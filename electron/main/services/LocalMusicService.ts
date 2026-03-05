@@ -5,6 +5,7 @@ import { LocalMusicDB, type MusicTrack } from "../database/LocalMusicDB";
 import { processLog } from "../logger";
 import { useStore } from "../store";
 import { loadNativeModule } from "../utils/native-loader";
+import type { AdvancedSearchQuery } from "@shared";
 
 type toolModule = typeof import("@native/tools");
 const tools: toolModule = loadNativeModule("tools.node", "tools");
@@ -166,6 +167,15 @@ export class LocalMusicService {
     await this.ensureInitialized();
     if (!this.db) return [];
     return this.db.getAllTracks();
+  }
+
+  async advancedSearchTracks(query: AdvancedSearchQuery, limit: number, offset: number) {
+    await this.ensureInitialized();
+    if (!this.db) return { items: [], total: 0, hasMore: false };
+    const total = this.db.countTracksByAdvancedQuery(query);
+    const items = this.db.searchTracksByAdvancedQuery(query, limit, offset);
+    const hasMore = offset + items.length < total;
+    return { items, total, hasMore };
   }
 
   /** 获取音频分析结果 */
