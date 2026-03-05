@@ -91,9 +91,25 @@
           clearable
           round
           @input="listSearch"
+          @focus="localSearchFocus = true"
+          @blur="localSearchFocus = false"
+          @keyup.enter="toLocalAdvancedKeywordsSearch"
         >
           <template #prefix>
             <SvgIcon name="Search" />
+          </template>
+          <template #suffix>
+            <n-button
+              v-if="localSearchFocus"
+              :focusable="false"
+              quaternary
+              size="tiny"
+              @click.stop="openLocalAdvancedSearch"
+            >
+              <template #icon>
+                <SvgIcon :size="16" name="SettingsLine" />
+              </template>
+            </n-button>
           </template>
         </n-input>
         <!-- Tab 切换 -->
@@ -157,14 +173,18 @@
         </template>
       </n-empty>
     </n-flex>
+    <SearchAdvancedLocal v-model:show="localAdvancedSearchShow" @submit="toLocalAdvancedSearch" />
   </div>
 </template>
 
 <script setup lang="ts">
 import { useMobile } from "@/composables/useMobile";
 import { usePlayerController } from "@/core/player/PlayerController";
-import { useLocalStore, useSettingStore } from "@/stores";
+import SearchAdvancedLocal from "@/components/Search/SearchAdvancedLocal.vue";
+import { useDataStore, useLocalStore, useSettingStore } from "@/stores";
 import type { SongType } from "@/types/main";
+import type { AdvancedSearchQuery } from "@shared";
+import { buildAdvancedSearchRouteQuery } from "@/utils/advancedSearch";
 import { formatSongsList } from "@/utils/format";
 import { fuzzySearch, renderIcon } from "@/utils/helper";
 import { openBatchList, openCreatePlaylist, openLocalMusicDirectoryModal } from "@/utils/modal";
@@ -172,6 +192,7 @@ import { debounce } from "lodash-es";
 import type { DropdownOption, MessageReactive } from "naive-ui";
 
 const router = useRouter();
+const dataStore = useDataStore();
 const localStore = useLocalStore();
 const settingStore = useSettingStore();
 const player = usePlayerController();
@@ -212,6 +233,57 @@ const folderOptions = computed(() => {
 // 模糊搜索数据
 const searchValue = ref<string>("");
 const filteredSearchResult = ref<SongType[]>([]);
+const localSearchFocus = ref(false);
+const localAdvancedSearchShow = ref(false);
+
+const hasAnyAdvancedCondition = (q: AdvancedSearchQuery) => {
+  return (
+    !!q.keywords?.trim() ||
+    !!q.title?.trim() ||
+    !!q.artist?.trim() ||
+    !!q.album?.trim() ||
+    typeof q.minDuration === "number" ||
+    typeof q.maxDuration === "number" ||
+    !!q.inPath?.trim() ||
+    !!q.path?.trim() ||
+    typeof q.minBitrate === "number" ||
+    typeof q.maxBitrate === "number" ||
+    typeof q.minSize === "number" ||
+    typeof q.maxSize === "number" ||
+    typeof q.minTrackNumber === "number" ||
+    typeof q.maxTrackNumber === "number"
+  );
+};
+
+const openLocalAdvancedSearch = () => {
+  localSearchFocus.value = false;
+  localAdvancedSearchShow.value = true;
+};
+
+const toLocalAdvancedSearch = (query: AdvancedSearchQuery) => {
+  if (!hasAnyAdvancedCondition(query)) {
+    window.$message.info("请至少设置一个搜索条件");
+    return;
+  }
+  localSearchFocus.value = false;
+  localAdvancedSearchShow.value = false;
+  dataStore.addAdvancedSearchHistory(query);
+  router.push({
+    name: "search",
+    query: buildAdvancedSearchRouteQuery(query),
+  });
+};
+
+const toLocalAdvancedKeywordsSearch = () => {
+  const keywords = searchValue.value.trim();
+  if (!keywords) return;
+  const query: AdvancedSearchQuery = { mode: "local", match: "contains", keywords };
+  dataStore.addAdvancedSearchHistory(query);
+  router.push({
+    name: "search",
+    query: buildAdvancedSearchRouteQuery(query),
+  });
+};
 
 // 获取基于文件夹过滤后的数据
 const getFilteredData = (): SongType[] => {
