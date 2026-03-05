@@ -19,7 +19,13 @@
         <SvgIcon :size="18" name="Search" />
       </template>
       <template #suffix>
-        <n-button :focusable="false" quaternary size="tiny" @click.stop="openAdvancedSearch">
+        <n-button
+          v-if="statusStore.searchFocus"
+          :focusable="false"
+          quaternary
+          size="tiny"
+          @click.stop="openAdvancedSearch"
+        >
           <template #icon>
             <SvgIcon :size="16" name="SettingsLine" />
           </template>
@@ -179,18 +185,6 @@ const toSearch = async (key: any, type: string = "keyword") => {
   if (!key && searchPlaceholder.value === "搜索音乐 / 视频") return;
   if (!key && searchPlaceholder.value !== "搜索音乐 / 视频" && searchRealkeyword.value) {
     key = searchRealkeyword.value?.trim();
-  }
-  // 本地搜索
-  if (!settingStore.useOnlineService) {
-    router.push({
-      name: "search",
-      query: buildAdvancedSearchRouteQuery({
-        mode: "local",
-        match: "contains",
-        keywords: String(key ?? "").trim(),
-      }),
-    });
-    return;
   }
   // 更新推荐
   updatePlaceholder();

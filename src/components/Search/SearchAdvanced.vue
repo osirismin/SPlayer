@@ -2,7 +2,7 @@
   <n-modal
     :show="show"
     preset="card"
-    title="高级搜索"
+    title="在线高级搜索"
     style="width: min(520px, calc(100vw - 24px))"
     @update:show="emit('update:show', $event)"
   >
@@ -16,14 +16,6 @@
       />
 
       <n-form :model="form" label-placement="left" label-width="72">
-        <n-form-item label="模式">
-          <n-radio-group v-model:value="form.mode">
-            <n-radio-button value="auto">自动</n-radio-button>
-            <n-radio-button value="online">在线</n-radio-button>
-            <n-radio-button value="local">本地</n-radio-button>
-          </n-radio-group>
-        </n-form-item>
-
         <n-form-item label="匹配">
           <n-radio-group v-model:value="form.match">
             <n-radio-button value="contains">包含</n-radio-button>
@@ -90,7 +82,6 @@ const emit = defineEmits<{
 const dataStore = useDataStore();
 
 const form = reactive<AdvancedSearchQuery>({
-  mode: "auto",
   match: "contains",
   keywords: "",
   title: "",
@@ -115,7 +106,8 @@ const maxSeconds = computed<number | null>({
 });
 
 const historyOptions = computed<SelectOption[]>(() => {
-  return dataStore.advancedSearchHistory.map((q, index) => ({
+  const list = dataStore.advancedSearchHistory.filter((q) => (q.mode ?? "auto") !== "local");
+  return list.map((q, index) => ({
     label: formatAdvancedSearchSummary(q),
     value: index,
   }));
@@ -123,9 +115,9 @@ const historyOptions = computed<SelectOption[]>(() => {
 
 const applyHistory = (value: number | null) => {
   if (value === null) return;
-  const q = dataStore.advancedSearchHistory[value];
+  const list = dataStore.advancedSearchHistory.filter((q) => (q.mode ?? "auto") !== "local");
+  const q = list[value];
   if (!q) return;
-  form.mode = q.mode ?? "auto";
   form.match = q.match ?? "contains";
   form.keywords = q.keywords ?? "";
   form.title = q.title ?? "";
@@ -137,7 +129,7 @@ const applyHistory = (value: number | null) => {
 
 const submit = () => {
   const query: AdvancedSearchQuery = {
-    mode: form.mode ?? "auto",
+    mode: "online",
     match: form.match ?? "contains",
     keywords: form.keywords?.trim() || undefined,
     title: form.title?.trim() || undefined,
@@ -159,9 +151,8 @@ watch(
   () => props.show,
   (show) => {
     if (!show) return;
-    const last = dataStore.advancedSearchHistory[0];
+    const last = dataStore.advancedSearchHistory.find((q) => (q.mode ?? "auto") !== "local");
     if (!last) return;
-    form.mode = last.mode ?? "auto";
     form.match = last.match ?? "contains";
     form.keywords = last.keywords ?? "";
     form.title = last.title ?? "";
@@ -172,4 +163,3 @@ watch(
   },
 );
 </script>
-
