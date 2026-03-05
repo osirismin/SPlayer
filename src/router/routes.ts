@@ -18,11 +18,42 @@ const appRoutes: Array<RouteRecordRaw> = [
     name: "search",
     component: () => import("@/views/Search/layout.vue"),
     beforeEnter: (to, _, next) => {
-      if (!to.query.keyword) next({ path: "/403" });
-      else next();
+      const hasKeyword = typeof to.query.keyword === "string" && !!to.query.keyword.trim();
+      const isAdvanced = to.query.advanced === "1" || to.query.advanced === "true";
+      if (hasKeyword) {
+        next();
+        return;
+      }
+      if (!isAdvanced) {
+        next({ path: "/403" });
+        return;
+      }
+      const hasAny =
+        !!to.query.keywords ||
+        !!to.query.title ||
+        !!to.query.artist ||
+        !!to.query.album ||
+        !!to.query.minDuration ||
+        !!to.query.maxDuration;
+      if (!hasAny) {
+        next({ path: "/403" });
+        return;
+      }
+      next();
     },
-    redirect: "/search/songs",
+    redirect: (to) => {
+      const isAdvanced = to.query.advanced === "1" || to.query.advanced === "true";
+      return {
+        path: isAdvanced ? "/search/advanced" : "/search/songs",
+        query: to.query,
+      };
+    },
     children: [
+      {
+        path: "advanced",
+        name: "search-advanced",
+        component: () => import("@/views/Search/advanced.vue"),
+      },
       {
         path: "songs",
         name: "search-songs",
