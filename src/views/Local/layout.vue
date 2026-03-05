@@ -184,7 +184,7 @@ import SearchAdvancedLocal from "@/components/Search/SearchAdvancedLocal.vue";
 import { useDataStore, useLocalStore, useSettingStore } from "@/stores";
 import type { SongType } from "@/types/main";
 import type { AdvancedSearchQuery } from "@shared";
-import { buildAdvancedSearchRouteQuery } from "@/utils/advancedSearch";
+import { buildAdvancedSearchRouteQuery, hasAnyAdvancedCondition } from "@/utils/advancedSearch";
 import { formatSongsList } from "@/utils/format";
 import { fuzzySearch, renderIcon } from "@/utils/helper";
 import { openBatchList, openCreatePlaylist, openLocalMusicDirectoryModal } from "@/utils/modal";
@@ -235,25 +235,6 @@ const searchValue = ref<string>("");
 const filteredSearchResult = ref<SongType[]>([]);
 const localSearchFocus = ref(false);
 const localAdvancedSearchShow = ref(false);
-
-const hasAnyAdvancedCondition = (q: AdvancedSearchQuery) => {
-  return (
-    !!q.keywords?.trim() ||
-    !!q.title?.trim() ||
-    !!q.artist?.trim() ||
-    !!q.album?.trim() ||
-    typeof q.minDuration === "number" ||
-    typeof q.maxDuration === "number" ||
-    !!q.inPath?.trim() ||
-    !!q.path?.trim() ||
-    typeof q.minBitrate === "number" ||
-    typeof q.maxBitrate === "number" ||
-    typeof q.minSize === "number" ||
-    typeof q.maxSize === "number" ||
-    typeof q.minTrackNumber === "number" ||
-    typeof q.maxTrackNumber === "number"
-  );
-};
 
 const openLocalAdvancedSearch = () => {
   localSearchFocus.value = false;

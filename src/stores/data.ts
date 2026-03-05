@@ -499,43 +499,27 @@ export const useDataStore = defineStore("data", {
       }
     },
     addAdvancedSearchHistory(query: AdvancedSearchQuery) {
+      const normalizeString = (v?: string) => (typeof v === "string" ? v.trim() || undefined : undefined);
+      const normalizeNumber = (v?: number) =>
+        typeof v === "number" && Number.isFinite(v) ? v : undefined;
+
       const normalized: AdvancedSearchQuery = {
         mode: query.mode,
         match: query.match,
-        keywords: query.keywords?.trim() || undefined,
-        title: query.title?.trim() || undefined,
-        artist: query.artist?.trim() || undefined,
-        album: query.album?.trim() || undefined,
-        minDuration:
-          typeof query.minDuration === "number" && Number.isFinite(query.minDuration)
-            ? query.minDuration
-            : undefined,
-        maxDuration:
-          typeof query.maxDuration === "number" && Number.isFinite(query.maxDuration)
-            ? query.maxDuration
-            : undefined,
-        inPath: query.inPath?.trim() || undefined,
-        path: query.path?.trim() || undefined,
-        minBitrate:
-          typeof query.minBitrate === "number" && Number.isFinite(query.minBitrate)
-            ? query.minBitrate
-            : undefined,
-        maxBitrate:
-          typeof query.maxBitrate === "number" && Number.isFinite(query.maxBitrate)
-            ? query.maxBitrate
-            : undefined,
-        minSize:
-          typeof query.minSize === "number" && Number.isFinite(query.minSize) ? query.minSize : undefined,
-        maxSize:
-          typeof query.maxSize === "number" && Number.isFinite(query.maxSize) ? query.maxSize : undefined,
-        minTrackNumber:
-          typeof query.minTrackNumber === "number" && Number.isFinite(query.minTrackNumber)
-            ? query.minTrackNumber
-            : undefined,
-        maxTrackNumber:
-          typeof query.maxTrackNumber === "number" && Number.isFinite(query.maxTrackNumber)
-            ? query.maxTrackNumber
-            : undefined,
+        keywords: normalizeString(query.keywords),
+        title: normalizeString(query.title),
+        artist: normalizeString(query.artist),
+        album: normalizeString(query.album),
+        minDuration: normalizeNumber(query.minDuration),
+        maxDuration: normalizeNumber(query.maxDuration),
+        inPath: normalizeString(query.inPath),
+        path: normalizeString(query.path),
+        minBitrate: normalizeNumber(query.minBitrate),
+        maxBitrate: normalizeNumber(query.maxBitrate),
+        minSize: normalizeNumber(query.minSize),
+        maxSize: normalizeNumber(query.maxSize),
+        minTrackNumber: normalizeNumber(query.minTrackNumber),
+        maxTrackNumber: normalizeNumber(query.maxTrackNumber),
       };
 
       const key = JSON.stringify(normalized);

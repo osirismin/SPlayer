@@ -2,7 +2,7 @@
   <n-modal
     :show="show"
     preset="card"
-    title="在线高级搜索"
+    title="高级搜索"
     style="width: min(520px, calc(100vw - 24px))"
     @update:show="emit('update:show', $event)"
   >
@@ -113,11 +113,7 @@ const historyOptions = computed<SelectOption[]>(() => {
   }));
 });
 
-const applyHistory = (value: number | null) => {
-  if (value === null) return;
-  const list = dataStore.advancedSearchHistory.filter((q) => (q.mode ?? "auto") !== "local");
-  const q = list[value];
-  if (!q) return;
+const applyQueryToForm = (q: AdvancedSearchQuery) => {
   form.match = q.match ?? "contains";
   form.keywords = q.keywords ?? "";
   form.title = q.title ?? "";
@@ -127,9 +123,17 @@ const applyHistory = (value: number | null) => {
   form.maxDuration = q.maxDuration;
 };
 
+const applyHistory = (value: number | null) => {
+  if (value === null) return;
+  const list = dataStore.advancedSearchHistory.filter((q) => (q.mode ?? "auto") !== "local");
+  const q = list[value];
+  if (!q) return;
+  applyQueryToForm(q);
+};
+
 const submit = () => {
   const query: AdvancedSearchQuery = {
-    mode: "online",
+    mode: "auto",
     match: form.match ?? "contains",
     keywords: form.keywords?.trim() || undefined,
     title: form.title?.trim() || undefined,
@@ -153,13 +157,7 @@ watch(
     if (!show) return;
     const last = dataStore.advancedSearchHistory.find((q) => (q.mode ?? "auto") !== "local");
     if (!last) return;
-    form.match = last.match ?? "contains";
-    form.keywords = last.keywords ?? "";
-    form.title = last.title ?? "";
-    form.artist = last.artist ?? "";
-    form.album = last.album ?? "";
-    form.minDuration = last.minDuration;
-    form.maxDuration = last.maxDuration;
+    applyQueryToForm(last);
   },
 );
 </script>

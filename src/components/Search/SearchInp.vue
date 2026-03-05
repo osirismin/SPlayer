@@ -20,7 +20,7 @@
       </template>
       <template #suffix>
         <n-button
-          v-if="statusStore.searchFocus"
+          v-if="statusStore.searchFocus && (settingStore.useOnlineService || isElectron)"
           :focusable="false"
           quaternary
           size="tiny"
@@ -54,9 +54,11 @@ import { songDetail } from "@/api/song";
 import { formatSongsList } from "@/utils/format";
 import SearchInpMenu from "@/components/Menu/SearchInpMenu.vue";
 import SearchAdvanced from "@/components/Search/SearchAdvanced.vue";
+import { isElectron } from "@/utils/env";
 import {
   buildAdvancedSearchRouteQuery,
   formatAdvancedSearchSummary,
+  hasAnyAdvancedCondition,
   parseAdvancedSearchQuery,
 } from "@/utils/advancedSearch";
 import type { AdvancedSearchQuery } from "@shared";
@@ -131,6 +133,10 @@ const openAdvancedSearch = () => {
 };
 
 const toAdvancedSearch = (query: AdvancedSearchQuery) => {
+  if (!hasAnyAdvancedCondition(query)) {
+    window.$message.info("请至少设置一个搜索条件");
+    return;
+  }
   statusStore.searchFocus = false;
   searchInputRef.value?.blur();
   advancedSearchShow.value = false;
@@ -158,6 +164,11 @@ const setSearchHistory = (keyword: string) => {
 
 // 更换搜索框关键词
 const updatePlaceholder = async () => {
+  if (!settingStore.useOnlineService) {
+    searchPlaceholder.value = "搜索本地音乐";
+    searchRealkeyword.value = "";
+    return;
+  }
   if (!settingStore.enableSearchKeyword) {
     searchPlaceholder.value = "搜索音乐 / 视频";
     return;
@@ -187,7 +198,9 @@ const toSearch = async (key: any, type: string = "keyword") => {
     key = searchRealkeyword.value?.trim();
   }
   // 更新推荐
-  updatePlaceholder();
+  if (settingStore.useOnlineService) {
+    updatePlaceholder();
+  }
   // 前往搜索
   switch (type) {
     case "keyword":

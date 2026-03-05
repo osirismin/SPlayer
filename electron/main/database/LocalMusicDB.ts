@@ -58,7 +58,7 @@ const buildAdvancedSearchWhere = (query: AdvancedSearchQuery) => {
     const v = normalizeInput(value);
     if (!v) return;
     if (match === "exact") {
-      where.push(`COALESCE(${column}, '') = ?`);
+      where.push(`${column} = ?`);
       params.push(v);
       return;
     }

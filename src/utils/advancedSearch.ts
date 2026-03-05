@@ -70,18 +70,18 @@ export const buildAdvancedSearchRouteQuery = (q: AdvancedSearchQuery) => {
   const query: Record<string, string> = { advanced: "1" };
   if (q.mode) query.mode = q.mode;
   if (q.match) query.match = q.match;
-  if (q.keywords?.trim()) query.keywords = q.keywords.trim();
-  if (q.title?.trim()) query.title = q.title.trim();
-  if (q.artist?.trim()) query.artist = q.artist.trim();
-  if (q.album?.trim()) query.album = q.album.trim();
+  if (q.keywords) query.keywords = q.keywords;
+  if (q.title) query.title = q.title;
+  if (q.artist) query.artist = q.artist;
+  if (q.album) query.album = q.album;
   if (typeof q.minDuration === "number" && Number.isFinite(q.minDuration)) {
     query.minDuration = String(q.minDuration);
   }
   if (typeof q.maxDuration === "number" && Number.isFinite(q.maxDuration)) {
     query.maxDuration = String(q.maxDuration);
   }
-  if (q.inPath?.trim()) query.inPath = q.inPath.trim();
-  if (q.path?.trim()) query.path = q.path.trim();
+  if (q.inPath) query.inPath = q.inPath;
+  if (q.path) query.path = q.path;
   if (typeof q.minBitrate === "number" && Number.isFinite(q.minBitrate)) {
     query.minBitrate = String(q.minBitrate);
   }
@@ -151,6 +151,25 @@ export const formatAdvancedSearchSummary = (q: AdvancedSearchQuery) => {
 export const buildOnlineKeywords = (q: AdvancedSearchQuery) => {
   const parts = [q.keywords, q.title, q.artist, q.album].map((v) => v?.trim()).filter(Boolean);
   return parts.join(" ");
+};
+
+export const hasAnyAdvancedCondition = (q: AdvancedSearchQuery) => {
+  return (
+    !!q.keywords?.trim() ||
+    !!q.title?.trim() ||
+    !!q.artist?.trim() ||
+    !!q.album?.trim() ||
+    (typeof q.minDuration === "number" && Number.isFinite(q.minDuration)) ||
+    (typeof q.maxDuration === "number" && Number.isFinite(q.maxDuration)) ||
+    !!q.inPath?.trim() ||
+    !!q.path?.trim() ||
+    (typeof q.minBitrate === "number" && Number.isFinite(q.minBitrate)) ||
+    (typeof q.maxBitrate === "number" && Number.isFinite(q.maxBitrate)) ||
+    (typeof q.minSize === "number" && Number.isFinite(q.minSize)) ||
+    (typeof q.maxSize === "number" && Number.isFinite(q.maxSize)) ||
+    (typeof q.minTrackNumber === "number" && Number.isFinite(q.minTrackNumber)) ||
+    (typeof q.maxTrackNumber === "number" && Number.isFinite(q.maxTrackNumber))
+  );
 };
 
 const getSongArtistText = (song: SongType) => {

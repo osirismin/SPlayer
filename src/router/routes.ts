@@ -1,4 +1,5 @@
 import AppLayout from "@/layout/AppLayout.vue";
+import { hasAnyAdvancedCondition, parseAdvancedSearchQuery } from "@/utils/advancedSearch";
 import { type RouteRecordRaw } from "vue-router";
 
 /**
@@ -28,23 +29,13 @@ const appRoutes: Array<RouteRecordRaw> = [
         next({ path: "/403" });
         return;
       }
-      const hasAny =
-        !!to.query.keywords ||
-        !!to.query.title ||
-        !!to.query.artist ||
-        !!to.query.album ||
-        !!to.query.minDuration ||
-        !!to.query.maxDuration ||
-        !!to.query.inPath ||
-        !!to.query.path ||
-        !!to.query.minBitrate ||
-        !!to.query.maxBitrate ||
-        !!to.query.minSize ||
-        !!to.query.maxSize ||
-        !!to.query.minTrackNumber ||
-        !!to.query.maxTrackNumber;
-      if (!hasAny) {
+      const advancedQuery = parseAdvancedSearchQuery(to.query);
+      if (!hasAnyAdvancedCondition(advancedQuery)) {
         next({ path: "/403" });
+        return;
+      }
+      if (to.name !== "search-advanced") {
+        next({ name: "search-advanced", query: to.query });
         return;
       }
       next();

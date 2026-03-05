@@ -254,11 +254,7 @@ const historyOptions = computed<SelectOption[]>(() => {
   }));
 });
 
-const applyHistory = (value: number | null) => {
-  if (value === null) return;
-  const list = dataStore.advancedSearchHistory.filter((q) => q.mode === "local");
-  const q = list[value];
-  if (!q) return;
+const applyQueryToForm = (q: AdvancedSearchQuery) => {
   form.match = q.match ?? "contains";
   form.keywords = q.keywords ?? "";
   form.title = q.title ?? "";
@@ -274,6 +270,14 @@ const applyHistory = (value: number | null) => {
   form.maxSize = q.maxSize;
   form.minTrackNumber = q.minTrackNumber;
   form.maxTrackNumber = q.maxTrackNumber;
+};
+
+const applyHistory = (value: number | null) => {
+  if (value === null) return;
+  const list = dataStore.advancedSearchHistory.filter((q) => q.mode === "local");
+  const q = list[value];
+  if (!q) return;
+  applyQueryToForm(q);
 };
 
 const submit = () => {
@@ -324,22 +328,7 @@ watch(
     if (!show) return;
     const last = dataStore.advancedSearchHistory.find((q) => q.mode === "local");
     if (!last) return;
-    form.match = last.match ?? "contains";
-    form.keywords = last.keywords ?? "";
-    form.title = last.title ?? "";
-    form.artist = last.artist ?? "";
-    form.album = last.album ?? "";
-    form.minDuration = last.minDuration;
-    form.maxDuration = last.maxDuration;
-    form.inPath = last.inPath;
-    form.path = last.path ?? "";
-    form.minBitrate = last.minBitrate;
-    form.maxBitrate = last.maxBitrate;
-    form.minSize = last.minSize;
-    form.maxSize = last.maxSize;
-    form.minTrackNumber = last.minTrackNumber;
-    form.maxTrackNumber = last.maxTrackNumber;
+    applyQueryToForm(last);
   },
 );
 </script>
-
