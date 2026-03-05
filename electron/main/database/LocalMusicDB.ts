@@ -69,6 +69,7 @@ const buildAdvancedSearchWhere = (query: AdvancedSearchQuery) => {
   addTextCondition("title", query.title ?? "");
   addTextCondition("artist", query.artist ?? "");
   addTextCondition("album", query.album ?? "");
+  addTextCondition("path", query.path ?? "");
 
   const keywords = normalizeInput(query.keywords ?? "");
   if (keywords) {
@@ -86,6 +87,44 @@ const buildAdvancedSearchWhere = (query: AdvancedSearchQuery) => {
   if (typeof query.maxDuration === "number" && Number.isFinite(query.maxDuration)) {
     where.push("duration <= ?");
     params.push(query.maxDuration);
+  }
+
+  const inPath = normalizeInput(query.inPath ?? "");
+  if (inPath) {
+    const withSep = inPath.endsWith("/") || inPath.endsWith("\\") ? inPath : inPath + "/";
+    const unixBase = withSep.replace(/\\/g, "/");
+    const winBase = withSep.replace(/\//g, "\\");
+    const unixPath = escapeLike(unixBase) + "%";
+    const winPath = escapeLike(winBase) + "%";
+    where.push("(COALESCE(path,'') LIKE ? ESCAPE '^' OR COALESCE(path,'') LIKE ? ESCAPE '^')");
+    params.push(unixPath, winPath);
+  }
+
+  if (typeof query.minBitrate === "number" && Number.isFinite(query.minBitrate)) {
+    where.push("bitrate >= ?");
+    params.push(query.minBitrate);
+  }
+  if (typeof query.maxBitrate === "number" && Number.isFinite(query.maxBitrate)) {
+    where.push("bitrate <= ?");
+    params.push(query.maxBitrate);
+  }
+
+  if (typeof query.minSize === "number" && Number.isFinite(query.minSize)) {
+    where.push("size >= ?");
+    params.push(query.minSize);
+  }
+  if (typeof query.maxSize === "number" && Number.isFinite(query.maxSize)) {
+    where.push("size <= ?");
+    params.push(query.maxSize);
+  }
+
+  if (typeof query.minTrackNumber === "number" && Number.isFinite(query.minTrackNumber)) {
+    where.push("track_number >= ?");
+    params.push(query.minTrackNumber);
+  }
+  if (typeof query.maxTrackNumber === "number" && Number.isFinite(query.maxTrackNumber)) {
+    where.push("track_number <= ?");
+    params.push(query.maxTrackNumber);
   }
 
   const clause = where.length ? `WHERE ${where.join(" AND ")}` : "";
