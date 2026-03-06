@@ -1,6 +1,7 @@
 import { personalFm, personalFmToTrash } from "@/api/rec";
 import { songQuality, songUrl, unlockSongUrl } from "@/api/song";
 import { useLyricManager } from "@/core/player/LyricManager";
+import { resolveAudioSourceByPlugin } from "@/core/plugin/PluginManager";
 import {
   useDataStore,
   useMusicStore,
@@ -439,10 +440,11 @@ class SongManager {
         };
         return this.nextPrefetch;
       } else if (canUnlock) {
-        // 官方失败或为试听时尝试解锁
-        const unlockUrl = await this.getUnlockSongUrl(nextSong);
-        if (unlockUrl.url) {
-          this.nextPrefetch = { id: songId, url: unlockUrl.url, isUnlocked: true };
+        // 官方失败或为试听时尝试插件链解析
+        const pluginResult = await resolveAudioSourceByPlugin(nextSong);
+        if (pluginResult) {
+          this.triggerCacheDownload(songId, pluginResult.url, pluginResult.quality);
+          this.nextPrefetch = { id: songId, url: pluginResult.url, isUnlocked: true };
           return this.nextPrefetch;
         } else if (officialUrl && settingStore.playSongDemo) {
           // 解锁失败，若官方为试听且允许试听，保留官方试听地址
@@ -552,12 +554,20 @@ class SongManager {
         if (isTrial) window.$message.warning("当前歌曲仅可试听");
         return { id: songId, url: officialUrl, quality, isUnlocked: false, source: "official" };
       }
-      // 如果官方失败（或被跳过），且未强制指定 auto (或者指定了 auto 但允许回退 - 即 Auto 模式)
-      if ((!forceSource || forceSource === "auto") && canUnlock) {
-        const unlockUrl = await this.getUnlockSongUrl(song);
-        if (unlockUrl.url) {
-          console.log(`🔓 [${songId}] 解锁成功`, unlockUrl);
-          return unlockUrl;
+      // 如果官方失败（或被跳过），尝试插件链解析
+      if (!forceSource || forceSource === "auto") {
+        const pluginResult = await resolveAudioSourceByPlugin(song);
+        if (pluginResult) {
+          console.log(`🔓 [${songId}] 插件解析成功`, pluginResult);
+          // 触发缓存下载
+          this.triggerCacheDownload(songId, pluginResult.url, pluginResult.quality);
+          return {
+            id: songId,
+            url: pluginResult.url,
+            isUnlocked: true,
+            quality: (pluginResult.quality as QualityType) || undefined,
+            source: (pluginResult.sourceLabel as AudioSourceType) || "netease",
+          };
         }
       }
       // 最后的兜底：检查本地是否有缓存（不区分音质）

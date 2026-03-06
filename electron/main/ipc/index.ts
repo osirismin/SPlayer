@@ -5,6 +5,7 @@ import initLyricIpc from "./ipc-lyric";
 import { initMacStatusBarIpc } from "./ipc-mac-statusbar";
 import initMediaIpc from "./ipc-media";
 import initMpvIpc from "./ipc-mpv";
+import initPluginIpc from "./ipc-plugin";
 import initProtocolIpc from "./ipc-protocol";
 import initRendererLogIpc from "./ipc-renderer-log";
 import initShortcutIpc from "./ipc-shortcut";
@@ -36,6 +37,7 @@ const initIpc = (): void => {
   initSocketIpc();
   initMediaIpc();
   initMpvIpc();
+  initPluginIpc();
   initRendererLogIpc();
   if (isMac) {
     initMacStatusBarIpc();

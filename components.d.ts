@@ -150,6 +150,8 @@ declare module 'vue' {
     PlayerSpectrum: typeof import('./src/components/Player/PlayerComponents/PlayerSpectrum.vue')['default']
     PlaylistAdd: typeof import('./src/components/Modal/PlaylistAdd.vue')['default']
     PlaylistPageManager: typeof import('./src/components/Modal/Setting/PlaylistPageManager.vue')['default']
+    PluginImport: typeof import('./src/components/Setting/components/PluginImport.vue')['default']
+    PluginList: typeof import('./src/components/Setting/components/PluginList.vue')['default']
     Provider: typeof import('./src/components/Global/Provider.vue')['default']
     RouterLink: typeof import('vue-router')['RouterLink']
     RouterView: typeof import('vue-router')['RouterView']

@@ -117,6 +117,12 @@
             :groups="networkConfig.groups"
             :highlight-key="highlightKey"
           />
+          <!-- 插件 -->
+          <UniversalSetting
+            v-else-if="activeKey === 'plugin'"
+            :groups="pluginConfig.groups"
+            :highlight-key="highlightKey"
+          />
           <!-- 关于 -->
           <AboutSetting v-else-if="activeKey === 'about'" />
           <!-- 空白 -->
@@ -144,6 +150,7 @@ import { useLyricSettings } from "./config/lyric";
 import { useKeyboardSettings } from "./config/keyboard";
 import { useLocalSettings } from "./config/local";
 import { useNetworkSettings } from "./config/network";
+import { usePluginSettings } from "./config/plugin";
 
 const props = defineProps<{ type: SettingType; scrollTo?: string }>();
 
@@ -154,6 +161,7 @@ const lyricConfig = useLyricSettings();
 const keyboardConfig = useKeyboardSettings();
 const localConfig = useLocalSettings();
 const networkConfig = useNetworkSettings();
+const pluginConfig = usePluginSettings();
 
 // 配置映射表
 const configs: Record<string, any> = {
@@ -164,6 +172,7 @@ const configs: Record<string, any> = {
   keyboard: keyboardConfig,
   local: localConfig,
   network: networkConfig,
+  plugin: pluginConfig,
 };
 
 // 聚合所有设置
@@ -176,6 +185,7 @@ const allSettingGroups = computed(() => {
     { key: "keyboard", groups: keyboardConfig.groups },
     { key: "local", groups: localConfig.groups },
     { key: "network", groups: networkConfig.groups },
+    { key: "plugin", groups: pluginConfig.groups },
   ];
 });
 
@@ -335,6 +345,11 @@ const menuOptions: MenuOption[] = [
     key: "network",
     label: "网络与连接",
     icon: renderIcon("Link"),
+  },
+  {
+    key: "plugin",
+    label: "插件管理",
+    icon: renderIcon("Extension"),
   },
   {
     key: "about",

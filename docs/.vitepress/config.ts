@@ -40,6 +40,13 @@ export default defineConfig({
         ],
       },
       {
+        text: "插件系统",
+        items: [
+          { text: "技术架构", link: "/plugin/architecture" },
+          { text: "插件开发指南", link: "/plugin/development" },
+        ],
+      },
+      {
         text: "开发指南",
         items: [
           { text: "原生插件", link: "/native" },

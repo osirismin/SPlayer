@@ -4,6 +4,7 @@ import Store from "electron-store";
 import { join } from "path";
 import defaultLyricConfig from "../../../src/assets/data/lyricConfig";
 import type { LyricConfig } from "../../../src/types/desktop-lyric";
+import type { PluginState } from "../../../src/types/plugin";
 import { storeLog } from "../logger";
 import { defaultAMLLDbServer } from "../utils/config";
 
@@ -74,6 +75,8 @@ export interface StoreType {
   };
   /** 更新通道 */
   updateChannel?: "stable" | "nightly";
+  /** 插件列表 */
+  plugins: PluginState[];
 }
 
 /**
@@ -119,6 +122,7 @@ export const useStore = () => {
       downloadThreadCount: 8,
       enableDownloadHttp2: true,
       updateChannel: "stable",
+      plugins: [],
     },
   });
 };

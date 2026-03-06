@@ -1,7 +1,7 @@
 import { mediaSessionManager } from "@/core/player/MediaSessionManager";
 import { usePlayerController } from "@/core/player/PlayerController";
 import { useDownloadManager } from "@/core/resource/DownloadManager";
-import { useDataStore, useSettingStore, useShortcutStore, useStatusStore } from "@/stores";
+import { useDataStore, useMusicStore, usePluginStore, useSettingStore, useShortcutStore, useStatusStore } from "@/stores";
 import { TASKBAR_IPC_CHANNELS } from "@/types/shared";
 import { isElectron, isMac } from "@/utils/env";
 import { printVersion } from "@/utils/log";
@@ -38,6 +38,11 @@ export const useInit = () => {
     openUserAgreement();
     // 加载数据
     await dataStore.loadData();
+    // 同步插件列表
+    const pluginStore = usePluginStore();
+    await pluginStore.syncFromMain();
+    // 注册插件系统所需的渲染器桥接
+    initPluginBridge();
     // 初始化 MediaSession
     mediaSessionManager.init();
     // 初始化播放器
@@ -102,6 +107,27 @@ export const useInit = () => {
       }
     }
   });
+};
+
+// 初始化插件系统渲染器桥接
+const initPluginBridge = () => {
+  if (!isElectron) return;
+  // 监听插件通知
+  window.electron.ipcRenderer.on("plugin:notify", (_event: unknown, message: string, type: string) => {
+    const typeMap: Record<string, () => void> = {
+      success: () => window.$message.success(message),
+      warning: () => window.$message.warning(message),
+      error: () => window.$message.error(message),
+    };
+    (typeMap[type] || (() => window.$message.info(message)))();
+  });
+  // 注册获取当前歌曲的桥接函数
+  window.__sp_getCurrentSong = () => {
+    const musicStore = useMusicStore();
+    const song = musicStore.playSong;
+    if (!song || !song.id) return null;
+    return { id: song.id, name: song.name, artists: song.artists, album: song.album };
+  };
 };
 
 // 事件监听

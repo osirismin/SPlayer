@@ -20,6 +20,8 @@ declare global {
         import: () => Promise<{ success: boolean; data?: any; error?: string }>;
       };
     };
+    // plugin bridge
+    __sp_getCurrentSong?: () => { id: number; name: string; artists: unknown; album: unknown } | null;
     // logs
     logger: {
       info: (message: string, ...args: unknown[]) => void;

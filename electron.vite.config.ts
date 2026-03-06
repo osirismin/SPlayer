@@ -51,6 +51,7 @@ export default defineConfig(({ mode }) => {
         rollupOptions: {
           input: {
             index: resolve(__dirname, "electron/preload/index.ts"),
+            "plugin-preload": resolve(__dirname, "electron/main/plugin/preload.ts"),
           },
         },
       },

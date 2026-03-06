@@ -5,6 +5,7 @@ import { join } from "path";
 import initAppServer from "../server";
 import initIpc from "./ipc";
 import { shutdownMedia } from "./ipc/ipc-media";
+import { PluginManager } from "./plugin/PluginManager";
 import { processLog } from "./logger";
 import { MpvService } from "./services/MpvService";
 import { SocketService } from "./services/SocketService";
@@ -106,6 +107,9 @@ class MainProcess {
       this.mainTray = initTray(this.mainWindow!);
       // 注册 IPC 通信
       initIpc();
+      // 初始化插件系统
+      const pluginManager = PluginManager.getInstance();
+      await pluginManager.init();
       // 自动启动 WebSocket
       SocketService.tryAutoStart();
     });
@@ -141,6 +145,8 @@ class MainProcess {
       (async () => {
         // 注销全部快捷键
         unregisterShortcuts();
+        // 关闭插件系统
+        PluginManager.getInstance().shutdown();
         // 清理媒体集成资源
         shutdownMedia();
         // 销毁任务栏歌词窗口
