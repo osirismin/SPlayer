@@ -104,6 +104,17 @@ const initTaskbarIpc = () => {
     taskbarLyricManager.handleFadeDone();
   });
 
+  // 强制重载歌词窗口
+  ipcMain.on(TASKBAR_IPC_CHANNELS.FORCE_RELOAD, () => {
+    const currentConfig = getTaskbarConfig();
+    if (!currentConfig.enabled) return;
+    taskbarLyricManager.close(false);
+    setTimeout(() => {
+      taskbarLyricManager.create(currentConfig.mode);
+      updateWindowVisibility(currentConfig);
+    }, 500);
+  });
+
   // 把事件发射到 app 里不太好，但是我觉得也没有必要为了这一个事件创建一个事件总线
   // TODO: 如果有了事件总线，通过那个事件总线发射这个事件
   (app as EventEmitter).on("explorer-restarted", () => {

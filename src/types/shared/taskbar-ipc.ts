@@ -174,4 +174,8 @@ export const TASKBAR_IPC_CHANNELS = {
    * 渲染进程 -> 主进程 (初始化握手)
    */
   REQUEST_DATA: "taskbar:request-data",
+  /**
+   * 渲染进程 -> 主进程 (强制重载歌词窗口)
+   */
+  FORCE_RELOAD: "taskbar:force-reload",
 } as const;

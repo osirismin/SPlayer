@@ -1252,6 +1252,21 @@ export const useLyricSettings = (): SettingConfig => {
             defaultValue: 0.8,
           },
           {
+            key: "taskbarLyricForceReload",
+            label: "强制重载",
+            type: "button",
+            description: "关闭并重新创建任务栏歌词窗口，用于修复显示异常",
+            buttonLabel: "重载",
+            action: () => {
+              if (!statusStore.showTaskbarLyric) {
+                window.$message.warning("请先开启任务栏歌词");
+                return;
+              }
+              window.electron.ipcRenderer.send(TASKBAR_IPC_CHANNELS.FORCE_RELOAD);
+              window.$message.success("任务栏歌词已重载");
+            },
+          },
+          {
             key: "taskbarLyricRestore",
             label: "恢复默认配置",
             type: "button",
