@@ -355,7 +355,7 @@ const updateBgCache = () => {
 watch(mainLyricIndex, updateBgCache);
 
 const displayItems = computed<DisplayItem[]>(() => {
-  if (!currentLyricText.value) {
+  if (taskbarConfig.hideLyrics || !currentLyricText.value) {
     return createMetadataItems(state.title, state.artist);
   }
 

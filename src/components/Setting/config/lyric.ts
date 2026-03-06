@@ -973,6 +973,19 @@ export const useLyricSettings = (): SettingConfig => {
             }),
           },
           {
+            key: "taskbarLyricHideLyrics",
+            label: "隐藏歌词",
+            type: "switch",
+            description: "开启后仅显示歌名和歌手，不显示歌词内容",
+            value: computed({
+              get: () => taskbarLyricConfig.hideLyrics,
+              set: (v) => {
+                taskbarLyricConfig.hideLyrics = v ?? false;
+                saveTaskbarLyricConfig({ hideLyrics: taskbarLyricConfig.hideLyrics });
+              },
+            }),
+          },
+          {
             key: "taskbarLyricUseThemeColor",
             label: "跟随封面颜色",
             type: "switch",

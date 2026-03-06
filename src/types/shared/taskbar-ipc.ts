@@ -53,6 +53,8 @@ export interface TaskbarConfig {
   mainScale: number;
   /** 副歌词缩放比例 */
   subScale: number;
+  /** 隐藏歌词，仅显示歌曲信息 */
+  hideLyrics: boolean;
 }
 
 export interface TrackData {
@@ -144,6 +146,7 @@ export const DEFAULT_TASKBAR_CONFIG: TaskbarConfig = {
   lineHeight: 1.1,
   mainScale: 1.0,
   subScale: 0.8,
+  hideLyrics: false,
 };
 
 export const TASKBAR_IPC_CHANNELS = {
