@@ -468,6 +468,15 @@ class TaskbarLyricWindow {
     }
   }
 
+  public setMousePassthrough(ignore: boolean) {
+    if (!this.win || this.win.isDestroyed()) return;
+    if (ignore) {
+      this.win.setIgnoreMouseEvents(true, { forward: true });
+    } else {
+      this.win.setIgnoreMouseEvents(false);
+    }
+  }
+
   public destroy() {
     if (this.isNativeDisposed) return;
     this.debouncedUpdateLayout.cancel();

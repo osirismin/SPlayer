@@ -38,6 +38,10 @@ const initTaskbarIpc = () => {
     taskbarLyricManager.setContentWidth(width);
   });
 
+  ipcMain.on("taskbar:set-ignore-mouse-events", (_event, ignore: boolean) => {
+    taskbarLyricManager.setMousePassthrough(Boolean(ignore));
+  });
+
   ipcMain.handle(TASKBAR_IPC_CHANNELS.GET_OPTION, () => getTaskbarConfig());
 
   // 设置配置（增量合并）

@@ -18,6 +18,7 @@ class FloatingTaskbarLyricWindow {
   private isFadingOut = false;
   private lastFloatingAlign: "left" | "right" | null = null;
   private lastAlwaysOnTop: boolean | null = null;
+  private lastFloatingLock: boolean | null = null;
 
   private debouncedSaveBounds = debounce((bounds: Electron.Rectangle) => {
     const store = useStore();
@@ -73,6 +74,7 @@ class FloatingTaskbarLyricWindow {
     if (!this.win) return null;
 
     this.applyAlwaysOnTop(true);
+    this.applyFloatingLock(true);
     this.win.loadURL(floatingTaskbarLyricUrl);
 
     const sendTheme = () => {
@@ -164,6 +166,15 @@ class FloatingTaskbarLyricWindow {
     }
   }
 
+  private applyFloatingLock(force: boolean) {
+    if (!this.win || this.win.isDestroyed()) return;
+    const store = useStore();
+    const floatingLock = store.get("taskbar.floatingLock", true);
+    if (!force && this.lastFloatingLock === floatingLock) return;
+    this.lastFloatingLock = floatingLock;
+    this.setMousePassthrough(floatingLock);
+  }
+
   updateLayout(_animate: boolean = false) {
     if (!this.win || this.win.isDestroyed()) return;
 
@@ -210,6 +221,7 @@ class FloatingTaskbarLyricWindow {
       this.win.setBounds({ x: nextX, y: nextY, width: nextWidth, height: nextHeight });
 
     this.applyAlwaysOnTop(false);
+    this.applyFloatingLock(false);
     this.sendFloatingAlign(false);
   }
 
@@ -246,6 +258,15 @@ class FloatingTaskbarLyricWindow {
     if (this.isFadingOut && this.win && !this.win.isDestroyed()) {
       this.win.hide();
       this.isFadingOut = false;
+    }
+  }
+
+  setMousePassthrough(ignore: boolean) {
+    if (!this.win || this.win.isDestroyed()) return;
+    if (ignore) {
+      this.win.setIgnoreMouseEvents(true, { forward: true });
+    } else {
+      this.win.setIgnoreMouseEvents(false);
     }
   }
 

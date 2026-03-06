@@ -25,6 +25,8 @@ export interface TaskbarConfig {
   floatingHeight: number;
   /** 悬浮置顶 */
   floatingAlwaysOnTop: boolean;
+  /** 悬浮锁定模式 */
+  floatingLock: boolean;
   /** 是否启用 */
   enabled: boolean;
   /** 暂停时显示 */
@@ -132,6 +134,7 @@ export const DEFAULT_TASKBAR_CONFIG: TaskbarConfig = {
   floatingWidth: 300,
   floatingHeight: 48,
   floatingAlwaysOnTop: false,
+  floatingLock: false,
   enabled: false,
   showWhenPaused: true,
   showCover: true,

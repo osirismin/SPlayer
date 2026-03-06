@@ -50,6 +50,10 @@ class TaskbarLyricManager {
     this.getActive().handleFadeDone();
   }
 
+  setMousePassthrough(ignore: boolean) {
+    this.getActive().setMousePassthrough(ignore);
+  }
+
   send(channel: string, ...args: unknown[]) {
     this.getActive().send(channel, ...args);
   }

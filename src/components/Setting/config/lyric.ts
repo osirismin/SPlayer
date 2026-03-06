@@ -906,6 +906,20 @@ export const useLyricSettings = (): SettingConfig => {
             }),
           },
           {
+            key: "taskbarLyricFloatingLock",
+            label: "锁定模式",
+            type: "switch",
+            description: "开启后鼠标将穿透窗口，关闭后可拖动窗口",
+            show: () => taskbarLyricConfig.mode === "floating",
+            value: computed({
+              get: () => taskbarLyricConfig.floatingLock,
+              set: (v) => {
+                taskbarLyricConfig.floatingLock = v ?? true;
+                saveTaskbarLyricConfig({ floatingLock: taskbarLyricConfig.floatingLock });
+              },
+            }),
+          },
+          {
             key: "taskbarLyricFloatingAutoWidth",
             label: "悬浮自动宽度",
             type: "switch",

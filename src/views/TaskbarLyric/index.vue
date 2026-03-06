@@ -92,6 +92,7 @@ const taskbarConfig = reactive<TaskbarConfig>({ ...DEFAULT_TASKBAR_CONFIG });
 const isFloating = computed(() => route.query.mode === "floating");
 const isHovering = ref(false);
 const showControls = computed(() => !isFloating.value && isHovering.value);
+let lastMousePassthrough: boolean | null = null;
 
 /**
  * 只有当 IPC 时间与本地时间误差超过 250ms 时，才同步 IPC 的时间
@@ -188,6 +189,14 @@ const handleMouseEnter = () => {
 
 const handleMouseLeave = () => {
   isHovering.value = false;
+};
+
+const setMousePassthrough = (ignore: boolean) => {
+  const ipc = window.electron?.ipcRenderer;
+  if (!ipc) return;
+  if (lastMousePassthrough === ignore) return;
+  lastMousePassthrough = ignore;
+  ipc.send("taskbar:set-ignore-mouse-events", ignore);
 };
 
 const controlAction = (action: "playPrev" | "playOrPause" | "playNext") => {
@@ -565,6 +574,15 @@ onMounted(() => {
   const ipc = window.electron?.ipcRenderer;
   if (!ipc) return;
 
+  if (isFloating.value) {
+    setMousePassthrough(taskbarConfig.floatingLock);
+    watch(
+      () => taskbarConfig.floatingLock,
+      (v) => setMousePassthrough(v),
+      { immediate: true },
+    );
+  }
+
   ipc.on(TASKBAR_IPC_CHANNELS.SYNC_STATE, (_, payload: SyncStatePayload) => {
     switch (payload.type) {
       case "full-hydration": {
@@ -698,6 +716,7 @@ $radius: 4px;
   margin: 5px 0;
   padding: 0 0.9em;
   box-sizing: border-box;
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: flex-start;
