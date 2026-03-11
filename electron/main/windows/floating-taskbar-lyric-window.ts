@@ -169,7 +169,7 @@ class FloatingTaskbarLyricWindow {
   private applyFloatingLock(force: boolean) {
     if (!this.win || this.win.isDestroyed()) return;
     const store = useStore();
-    const floatingLock = store.get("taskbar.floatingLock", true);
+    const floatingLock = store.get("taskbar.floatingLock", false);
     if (!force && this.lastFloatingLock === floatingLock) return;
     this.lastFloatingLock = floatingLock;
     this.setMousePassthrough(floatingLock);

@@ -39,7 +39,7 @@ const initTaskbarIpc = () => {
   });
 
   ipcMain.on("taskbar:set-ignore-mouse-events", (_event, ignore: boolean) => {
-    taskbarLyricManager.setMousePassthrough(Boolean(ignore));
+    taskbarLyricManager.setMousePassthrough(ignore);
   });
 
   ipcMain.handle(TASKBAR_IPC_CHANNELS.GET_OPTION, () => getTaskbarConfig());
@@ -114,7 +114,6 @@ const initTaskbarIpc = () => {
     if (!currentConfig.enabled) return;
     taskbarLyricManager.close(false);
     setTimeout(() => {
-      taskbarLyricManager.create(currentConfig.mode);
       updateWindowVisibility(currentConfig);
     }, 500);
   });

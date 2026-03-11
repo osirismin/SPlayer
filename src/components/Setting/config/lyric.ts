@@ -914,7 +914,7 @@ export const useLyricSettings = (): SettingConfig => {
             value: computed({
               get: () => taskbarLyricConfig.floatingLock,
               set: (v) => {
-                taskbarLyricConfig.floatingLock = v ?? true;
+                taskbarLyricConfig.floatingLock = v ?? false;
                 saveTaskbarLyricConfig({ floatingLock: taskbarLyricConfig.floatingLock });
               },
             }),
