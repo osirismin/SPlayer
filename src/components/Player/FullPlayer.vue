@@ -1,6 +1,15 @@
 <template>
   <Teleport to="body">
-    <Transition :name="settingStore.playerExpandAnimation" mode="out-in">
+    <!-- 背景模糊层：独立于展开动画，仅做 opacity 过渡，避免 backdrop-filter 在动画中每帧重算 -->
+    <Transition name="fade">
+      <div v-if="statusStore.showFullPlayer" class="full-player-backdrop" />
+    </Transition>
+    <!-- 内容层：展开动画，不携带 backdrop-filter -->
+    <Transition
+      :name="settingStore.playerExpandAnimation"
+      @after-enter="isContentReady = true"
+      @before-leave="isContentReady = false"
+    >
       <div
         v-if="statusStore.showFullPlayer"
         :style="{
@@ -67,25 +76,28 @@
                   :center="pureLyricMode || noLrc"
                   :light="!(isFullscreenType && noLrc)"
                 />
-                <PlayerLyric v-if="!noLrc" />
+                <!-- 歌词组件延迟挂载 -->
+                <PlayerLyric v-if="!noLrc && isContentReady" />
               </div>
             </div>
           </Transition>
-          <!-- 全屏评论 -->
+          <!-- 全屏评论 - 延迟挂载 -->
           <PlayerComment
-            v-if="!isHalfComment"
+            v-if="!isHalfComment && isContentReady"
             class="comment-full"
             :class="{ visible: showComment }"
           />
           <!-- 控制中心 -->
           <PlayerControl @mouseenter.stop="stopHide" @mouseleave.stop="resumeHide" />
-          <!-- 音乐频谱 -->
-          <PlayerSpectrum
-            v-if="settingStore.showSpectrums"
-            :color="statusStore.mainColor ? `rgb(${statusStore.mainColor})` : 'rgb(239 239 239)'"
-            :show="!statusStore.playerMetaShow"
-            :height="60"
-          />
+          <!-- 音乐频谱 - 延迟挂载 -->
+          <Transition name="fade">
+            <PlayerSpectrum
+              v-if="settingStore.showSpectrums && isContentReady"
+              :color="statusStore.mainColor ? `rgb(${statusStore.mainColor})` : 'rgb(239 239 239)'"
+              :show="!statusStore.playerMetaShow"
+              :height="60"
+            />
+          </Transition>
         </template>
       </div>
     </Transition>
@@ -105,6 +117,9 @@ const { isTablet } = useMobile();
 
 /** 封面主颜色 */
 const mainCoverColor = useCssVar("--main-cover-color", document.documentElement);
+
+/** 内容是否准备好 */
+const isContentReady = ref(false);
 
 /** 播放器样式是否为全屏封面 */
 const isFullscreenType = computed(() => settingStore.playerType === "fullscreen");
@@ -278,6 +293,16 @@ onBeforeUnmount(() => {
 </script>
 
 <style lang="scss" scoped>
+.full-player-backdrop {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: #00000060;
+  backdrop-filter: blur(80px);
+  z-index: 999;
+}
 .full-player {
   position: fixed;
   top: 0;
@@ -289,8 +314,6 @@ onBeforeUnmount(() => {
   align-items: center;
   justify-content: center;
   color: rgb(var(--main-cover-color));
-  background-color: #00000060;
-  backdrop-filter: blur(80px);
   overflow: hidden;
   z-index: 1000;
   .lrc-instant {

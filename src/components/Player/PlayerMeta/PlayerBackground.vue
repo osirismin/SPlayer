@@ -1,31 +1,29 @@
 <template>
   <div :class="['background', settingStore.playerBackgroundType]">
-    <Transition name="fade" mode="out-in">
-      <!-- 背景色 -->
-      <div
-        v-if="settingStore.playerBackgroundType === 'color'"
-        :key="musicStore.songCover"
-        class="color"
-      />
-      <!-- 背景模糊 -->
-      <s-image
-        v-else-if="settingStore.playerBackgroundType === 'blur'"
-        :src="musicStore.songCover"
-        :observe-visibility="false"
-        class="bg-img"
+    <!-- 背景色 -->
+    <Transition v-if="settingStore.playerBackgroundType === 'color'" name="fade">
+      <div :key="musicStore.songCover" class="color" />
+    </Transition>
+    <!-- 背景模糊 -->
+    <template v-else-if="settingStore.playerBackgroundType === 'blur'">
+      <img
+        v-for="(layer, index) in blurLayers"
+        :key="index"
+        :src="layer.src"
+        :class="['bg-img', { active: layer.active }]"
         alt="cover"
       />
-      <!-- 流体效果 -->
-      <BackgroundRender
-        v-else-if="settingStore.playerBackgroundType === 'animation'"
-        :album="musicStore.songCover"
-        :fps="settingStore.playerBackgroundFps ?? 60"
-        :flowSpeed="flowSpeed"
-        :hasLyric="musicStore.isHasLrc"
-        :lowFreqVolume="lowFreqVolume"
-        :renderScale="settingStore.playerBackgroundRenderScale ?? 0.5"
-      />
-    </Transition>
+    </template>
+    <!-- 流体效果 -->
+    <BackgroundRender
+      v-else-if="settingStore.playerBackgroundType === 'animation'"
+      :album="musicStore.songCover"
+      :fps="settingStore.playerBackgroundFps ?? 60"
+      :flowSpeed="flowSpeed"
+      :hasLyric="musicStore.isHasLrc"
+      :lowFreqVolume="lowFreqVolume"
+      :renderScale="settingStore.playerBackgroundRenderScale ?? 0.5"
+    />
   </div>
 </template>
 
@@ -37,6 +35,37 @@ const musicStore = useMusicStore();
 const settingStore = useSettingStore();
 const statusStore = useStatusStore();
 const player = usePlayerController();
+
+// 双缓冲层
+const blurLayers = reactive([
+  { src: musicStore.songCover, active: true },
+  { src: "", active: false },
+]);
+let currentLayerIndex = 0;
+
+watch(
+  () => musicStore.songCover,
+  (newCover) => {
+    const nextIndex = currentLayerIndex === 0 ? 1 : 0;
+    const switchLayer = () => {
+      blurLayers[nextIndex].src = newCover;
+      nextTick(() => {
+        blurLayers[nextIndex].active = true;
+        blurLayers[currentLayerIndex].active = false;
+        currentLayerIndex = nextIndex;
+      });
+    };
+    if (!newCover || !newCover.startsWith("http")) {
+      switchLayer();
+      return;
+    }
+    // 预加载图片
+    const img = new Image();
+    img.onload = switchLayer;
+    img.onerror = switchLayer;
+    img.src = newCover;
+  },
+);
 
 // 低频音量
 const lowFreqVolume = ref(1.0);
@@ -107,10 +136,17 @@ onBeforeUnmount(() => {
     align-items: center;
     justify-content: center;
     .bg-img {
+      position: absolute;
       width: 100%;
-      height: auto;
+      height: 100%;
+      object-fit: cover;
       transform: scale(1.5);
       filter: blur(80px) contrast(1.2);
+      opacity: 0;
+      transition: opacity 0.5s ease-in-out;
+      &.active {
+        opacity: 1;
+      }
     }
   }
   &.color {
