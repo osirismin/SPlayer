@@ -5,11 +5,7 @@
       <div v-if="statusStore.showFullPlayer" class="full-player-backdrop" />
     </Transition>
     <!-- 内容层：展开动画，不携带 backdrop-filter -->
-    <Transition
-      :name="settingStore.playerExpandAnimation"
-      @after-enter="isContentReady = true"
-      @before-leave="isContentReady = false"
-    >
+    <Transition :name="settingStore.playerExpandAnimation">
       <div
         v-if="statusStore.showFullPlayer"
         :style="{
@@ -77,13 +73,13 @@
                   :light="!(isFullscreenType && noLrc)"
                 />
                 <!-- 歌词组件延迟挂载 -->
-                <PlayerLyric v-if="!noLrc && isContentReady" />
+                <PlayerLyric v-if="!noLrc" />
               </div>
             </div>
           </Transition>
           <!-- 全屏评论 - 延迟挂载 -->
           <PlayerComment
-            v-if="!isHalfComment && isContentReady"
+            v-if="!isHalfComment"
             class="comment-full"
             :class="{ visible: showComment }"
           />
@@ -92,7 +88,7 @@
           <!-- 音乐频谱 - 延迟挂载 -->
           <Transition name="fade">
             <PlayerSpectrum
-              v-if="settingStore.showSpectrums && isContentReady"
+              v-if="settingStore.showSpectrums"
               :color="statusStore.mainColor ? `rgb(${statusStore.mainColor})` : 'rgb(239 239 239)'"
               :show="!statusStore.playerMetaShow"
               :height="60"
@@ -117,9 +113,6 @@ const { isTablet } = useMobile();
 
 /** 封面主颜色 */
 const mainCoverColor = useCssVar("--main-cover-color", document.documentElement);
-
-/** 内容是否准备好 */
-const isContentReady = ref(false);
 
 /** 播放器样式是否为全屏封面 */
 const isFullscreenType = computed(() => settingStore.playerType === "fullscreen");

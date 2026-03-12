@@ -109,7 +109,8 @@ const getLocalCover = async () => {
   }
   // 先检查blob中是否存在
   const blobURLManager = useBlobURLManager();
-  const blobURL = blobURLManager.getBlobURL(musicStore.playSong.path);
+  const coverKey = `cover:${musicStore.playSong.path}`;
+  const blobURL = blobURLManager.getBlobURL(coverKey);
   if (blobURL) {
     localCoverDataUrl.value = blobURL;
     return;
@@ -120,16 +121,11 @@ const getLocalCover = async () => {
       musicStore.playSong.path,
     );
     if (coverData) {
-      // 使用 Data URL，确保跨窗口可用
-      const blob = new Blob([coverData.data], { type: coverData.format });
-      const reader = new FileReader();
-      const dataUrl = await new Promise<string>((resolve, reject) => {
-        reader.onload = () => resolve(reader.result as string);
-        reader.onerror = reject;
-        reader.onabort = reject;
-        reader.readAsDataURL(blob);
-      });
-      localCoverDataUrl.value = dataUrl;
+      localCoverDataUrl.value = blobURLManager.createBlobURL(
+        coverData.data,
+        coverData.format,
+        coverKey,
+      );
     } else {
       localCoverDataUrl.value = "";
     }

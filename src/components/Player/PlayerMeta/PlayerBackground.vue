@@ -43,11 +43,20 @@ const blurLayers = reactive([
 ]);
 let currentLayerIndex = 0;
 
+let preloadImg: HTMLImageElement | null = null;
+
 watch(
   () => musicStore.songCover,
   (newCover) => {
+    if (preloadImg) {
+      preloadImg.onload = null;
+      preloadImg.onerror = null;
+      preloadImg.src = "";
+      preloadImg = null;
+    }
     const nextIndex = currentLayerIndex === 0 ? 1 : 0;
     const switchLayer = () => {
+      preloadImg = null;
       blurLayers[nextIndex].src = newCover;
       nextTick(() => {
         blurLayers[nextIndex].active = true;
@@ -61,6 +70,7 @@ watch(
     }
     // 预加载图片
     const img = new Image();
+    preloadImg = img;
     img.onload = switchLayer;
     img.onerror = switchLayer;
     img.src = newCover;
@@ -109,6 +119,14 @@ watch(
 
 onBeforeUnmount(() => {
   pauseRaf();
+  if (preloadImg) {
+    preloadImg.onload = null;
+    preloadImg.onerror = null;
+    preloadImg.src = "";
+    preloadImg = null;
+  }
+  blurLayers[0].src = "";
+  blurLayers[1].src = "";
 });
 </script>
 

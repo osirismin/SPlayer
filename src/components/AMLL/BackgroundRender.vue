@@ -90,25 +90,12 @@ onMounted(() => {
   }
 });
 
-let disposeTimer: ReturnType<typeof setTimeout> | null = null;
-
 onBeforeUnmount(() => {
   const renderer = bgRenderRef.value;
   if (renderer) {
     renderer.pause();
     bgRenderRef.value = undefined;
-    // 延迟销毁
-    disposeTimer = setTimeout(() => {
-      renderer.dispose();
-      disposeTimer = null;
-    }, 500);
-  }
-});
-
-onUnmounted(() => {
-  if (disposeTimer) {
-    clearTimeout(disposeTimer);
-    disposeTimer = null;
+    renderer.dispose();
   }
 });
 

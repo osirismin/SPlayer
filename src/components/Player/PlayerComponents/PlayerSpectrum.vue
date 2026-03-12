@@ -19,6 +19,9 @@ const player = usePlayerController();
 // canvas
 const canvasRef = ref<HTMLCanvasElement | null>(null);
 const isKeepDrawing = ref<boolean>(true);
+let cachedCtx: CanvasRenderingContext2D | null = null;
+let lastCanvasWidth = 0;
+let lastCanvasHeight = 0;
 
 /**
  * 绘制音乐频谱图
@@ -30,20 +33,23 @@ const drawSpectrum = () => {
   // 转换为普通数组并处理
   const data = Array.from(spectrumData).slice(10);
   if (!isKeepDrawing.value || !canvasRef.value) return;
-  // 设置画布宽度，最大为 1600
-  canvasRef.value.width = document.body.clientWidth >= 1600 ? 1600 : document.body.clientWidth;
-  // 设置画布高度
-  canvasRef.value.height = props.height || 80;
-  // 获取2D上下文
-  const ctx: CanvasRenderingContext2D | null = canvasRef.value.getContext("2d");
-  // 画布宽高
-  const canvasWidth = canvasRef.value.width;
-  const canvasHeight = canvasRef.value.height;
-  // 频谱数量
+  const targetWidth = document.body.clientWidth >= 1600 ? 1600 : document.body.clientWidth;
+  const targetHeight = props.height || 80;
+  if (lastCanvasWidth !== targetWidth || lastCanvasHeight !== targetHeight) {
+    canvasRef.value.width = targetWidth;
+    canvasRef.value.height = targetHeight;
+    lastCanvasWidth = targetWidth;
+    lastCanvasHeight = targetHeight;
+    cachedCtx = null;
+  }
+  if (!cachedCtx) {
+    cachedCtx = canvasRef.value.getContext("2d");
+  }
+  const ctx = cachedCtx;
+  const canvasWidth = lastCanvasWidth;
+  const canvasHeight = lastCanvasHeight;
   const numBars = data.length / 2.5;
-  // 圆角半径
   const cornerRadius = props.radius || 2.5;
-  // 柱形宽度
   const barWidth = canvasWidth / numBars / 2;
   if (!ctx) return;
   // 清除画布
@@ -114,6 +120,11 @@ onMounted(() => {
 onBeforeUnmount(() => {
   isKeepDrawing.value = false;
   pauseDraw();
+  if (canvasRef.value) {
+    canvasRef.value.width = 0;
+    canvasRef.value.height = 0;
+  }
+  cachedCtx = null;
 });
 </script>
 

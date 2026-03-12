@@ -86,7 +86,8 @@ const amLyricsData = computed(() => {
   const lyrics = useYrc ? songLyric.yrcData : songLyric.lrcData;
   // 简单检查歌词有效性
   if (!Array.isArray(lyrics) || lyrics.length === 0) return [];
-  // 此处cloneDeep 删除会暴毙 不要动
+  // cloneDeep 必须保留：AMLL 内部用 structuredClone 克隆歌词，
+  // 浅拷贝仍包含 Vue 响应式 Proxy，structuredClone 无法处理
   const clonedLyrics = cloneDeep(lyrics) as LyricLine[];
   // 处理歌词内容
   const { showTran, showRoma, showWordsRoma, swapTranRoma, lyricAlignRight } = settingStore;

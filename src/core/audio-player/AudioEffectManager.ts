@@ -18,6 +18,8 @@ export class AudioEffectManager {
   /** 平滑后的低频音量 */
   private smoothedLowFreqVolume: number = 0;
 
+  private freqDataBuffer: Uint8Array<ArrayBuffer> | null = null;
+
   /** 均衡器频段 (10段) */
   private readonly eqFrequencies = [32, 64, 125, 250, 500, 1000, 2000, 4000, 8000, 16000];
 
@@ -235,12 +237,19 @@ export class AudioEffectManager {
     return this.filters.map((f) => f.gain.value);
   }
 
+  private getFreqBuffer(): Uint8Array<ArrayBuffer> {
+    if (!this.freqDataBuffer && this.analyserNode) {
+      this.freqDataBuffer = new Uint8Array(this.analyserNode.frequencyBinCount);
+    }
+    return this.freqDataBuffer!;
+  }
+
   /**
    * 获取频谱数据 (用于可视化)
    */
   public getFrequencyData(): Uint8Array {
     if (!this.analyserNode) return new Uint8Array(0);
-    const dataArray = new Uint8Array(this.analyserNode.frequencyBinCount);
+    const dataArray = this.getFreqBuffer();
     this.analyserNode.getByteFrequencyData(dataArray);
     return dataArray;
   }
@@ -252,7 +261,7 @@ export class AudioEffectManager {
   public getLowFrequencyVolume(): number {
     if (!this.analyserNode) return 0;
 
-    const dataArray = new Uint8Array(this.analyserNode.frequencyBinCount);
+    const dataArray = this.getFreqBuffer();
     this.analyserNode.getByteFrequencyData(dataArray);
 
     // 低频范围：前 3 个 bin (约 0-280Hz，基于 512 FFT 和约 48kHz 采样率)
@@ -288,5 +297,6 @@ export class AudioEffectManager {
     this.highPassFilter?.disconnect();
     this.lowPassFilter?.disconnect();
     this.analyserNode?.disconnect();
+    this.freqDataBuffer = null;
   }
 }

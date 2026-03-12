@@ -74,18 +74,13 @@ class MainProcess {
 
       // 配置 COOP/COEP/CORP 头，FFmpeg 需要
       session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
-        const responseHeaders = { ...details.responseHeaders };
-        const url = new URL(details.url);
-
         // 桌面歌词窗口需要透明背景，必须排除严格的安全策略
-        if (url.searchParams.get("win") === "desktop-lyric") {
-          callback({ responseHeaders });
+        if (details.url.includes("win=desktop-lyric")) {
+          callback({ responseHeaders: details.responseHeaders });
           return;
         }
 
-        // 同样可以解决 CORS 限制，但为了避免安全问题，等真有需要的时候再开
-        // responseHeaders["Access-Control-Allow-Origin"] = ["*"];
-        // responseHeaders["Access-Control-Allow-Headers"] = ["*"];
+        const responseHeaders = { ...details.responseHeaders };
 
         // COOP/COEP/CORP 配置
         responseHeaders["Cross-Origin-Opener-Policy"] = ["same-origin"];

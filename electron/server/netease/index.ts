@@ -1,9 +1,53 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from "fastify";
 import { pathCase } from "change-case";
+import { readdirSync } from "fs";
+import { join } from "path";
 import { serverLog } from "../../main/logger";
 import { useStore } from "../../main/store";
 import { defaultAMLLDbServer } from "../../main/utils/config";
-import NeteaseCloudMusicApi from "@neteasecloudmusicapienhanced/api";
+
+// 按需加载 NcmApi：启动时只扫描文件名建路由映射，首次请求时才 require 对应模块
+
+let routeMap: Map<string, string> | null = null;
+const moduleCache = new Map<string, (...args: unknown[]) => Promise<{ body: unknown }>>();
+let cookieToJson: ((str: string) => Record<string, string>) | null = null;
+let requestFn: ((...args: unknown[]) => Promise<unknown>) | null = null;
+
+function ensureRouteMap(): Map<string, string> {
+  if (routeMap) return routeMap;
+
+  routeMap = new Map();
+  try {
+    const modulePath = join(require.resolve("@neteasecloudmusicapienhanced/api"), "..", "module");
+    const files = readdirSync(modulePath);
+    for (const file of files) {
+      if (!file.endsWith(".js")) continue;
+      const name = file.slice(0, -3);
+      const filePath = join(modulePath, file);
+      routeMap.set(name, filePath);
+      routeMap.set(pathCase(name), filePath);
+    }
+
+    const pkgRoot = join(require.resolve("@neteasecloudmusicapienhanced/api"), "..");
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const util = require(join(pkgRoot, "util"));
+    cookieToJson = util.cookieToJson;
+  } catch (e) {
+    serverLog.error("❌ Failed to scan NcmApi modules:", e);
+  }
+  serverLog.info(`🌐 NcmApi route map built, ${routeMap.size} routes`);
+  return routeMap;
+}
+
+function loadModule(filePath: string): (...args: unknown[]) => Promise<{ body: unknown }> {
+  const cached = moduleCache.get(filePath);
+  if (cached) return cached;
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const mod = require(filePath);
+  const fn = typeof mod === "function" ? mod : mod.default || mod;
+  moduleCache.set(filePath, fn);
+  return fn;
+}
 
 // 初始化 NcmAPI
 export const initNcmAPI = async (fastify: FastifyInstance) => {
@@ -21,31 +65,35 @@ export const initNcmAPI = async (fastify: FastifyInstance) => {
   // 动态路由处理函数
   const dynamicHandler = async (req: FastifyRequest, reply: FastifyReply) => {
     const { "*": requestPath } = req.params as { "*": string };
+    const map = ensureRouteMap();
 
-    // 将 path-case 转回 camelCase 或直接匹配下划线路由
-    const routerName = Object.keys(NeteaseCloudMusicApi).find((key) => {
-      // 跳过非函数属性
-      if (typeof (NeteaseCloudMusicApi as Record<string, unknown>)[key] !== "function")
-        return false;
-      // 匹配 path-case 格式
-      return pathCase(key) === requestPath || key === requestPath;
-    });
-
-    if (!routerName) {
+    const filePath = map.get(requestPath);
+    if (!filePath) {
       return reply.status(404).send({ error: "API not found" });
     }
 
-    const neteaseApi = (
-      NeteaseCloudMusicApi as unknown as Record<string, (params: unknown) => Promise<any>>
-    )[routerName];
     serverLog.log("🌐 Request NcmAPI:", requestPath);
 
     try {
-      const result = await neteaseApi({
+      const moduleFn = loadModule(filePath);
+
+      const rawCookie = req.cookies;
+      const cookie =
+        typeof rawCookie === "string" && cookieToJson ? cookieToJson(rawCookie) : rawCookie || {};
+
+      const query = {
         ...(req.query as Record<string, unknown>),
         ...(req.body as Record<string, unknown>),
-        cookie: req.cookies,
-      });
+        cookie,
+      };
+
+      if (!requestFn) {
+        const pkgRoot = join(require.resolve("@neteasecloudmusicapienhanced/api"), "..");
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
+        requestFn = require(join(pkgRoot, "util", "request"));
+      }
+
+      const result = await moduleFn(query, requestFn);
       return reply.send(result.body);
     } catch (error: unknown) {
       serverLog.error("❌ NcmAPI Error:", error);
