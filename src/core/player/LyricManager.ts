@@ -21,6 +21,9 @@ import { getConverter } from "@/utils/opencc";
 import { type LyricLine, parseTTML, parseYrc } from "@applemusic-like-lyrics/lyric";
 import { cloneDeep, isEmpty } from "lodash-es";
 import { attachTtmlBgLines, cleanTTMLTranslations } from "@/utils/lyric/parseTTML";
+import { nowPlayingPushTrackAndLyric } from "./PlayerIpc";
+import { toRaw } from "vue";
+import type { LyricData, LyricLine as SharedLyricLine } from "@/types/shared/lyrics";
 
 interface LyricFetchResult {
   data: SongLyric;
@@ -721,27 +724,41 @@ class LyricManager {
             word: line.words?.map((w) => w.word)?.join("") || "",
             startTime: line.startTime || 0,
             endTime: line.endTime || 0,
-            romanWord: line.words?.map((w) => w.romanWord)?.join("") || undefined,
+            romanWord: line.words?.map((w) => w.romanWord)?.join("") || "",
           },
         ],
       }));
     }
     // 比较新旧歌词数据，如果相同则跳过设置，避免重复重载
     if (this.isLyricDataEqual(musicStore.songLyric, lyricData)) {
-      // 仅更新加载状态，不更新歌词数据
       statusStore.lyricLoading = false;
-      // 单曲循环时，歌词数据未变，需通知桌面歌词取消加载状态
-      if (isElectron) {
-        window.electron.ipcRenderer.send("desktop-lyric:update-data", {
-          lyricLoading: false,
-        });
-      }
+      this.pushNowPlaying(musicStore.songLyric);
       return;
     }
     // 设置歌词
     musicStore.setSongLyric(lyricData, true);
-    // 结束加载状态
     statusStore.lyricLoading = false;
+    // 推送到 NowPlayingService 总线（同步给三种歌词窗口）
+    this.pushNowPlaying(lyricData);
+  }
+
+  /** 把当前曲目 + 解析后的歌词推送到 NowPlayingService 总线 */
+  private pushNowPlaying(lyricData: SongLyric) {
+    const musicStore = useMusicStore();
+    const song = musicStore.playSong;
+    if (!song) {
+      nowPlayingPushTrackAndLyric(null, [], null);
+      return;
+    }
+    const yrc = lyricData.yrcData ?? [];
+    const lrc = lyricData.lrcData ?? [];
+    const useYrc = yrc.length > 0;
+    const lines = (useYrc ? yrc : lrc) as unknown as SharedLyricLine[];
+    const source: LyricData =
+      lines.length === 0
+        ? null
+        : { source: song.path ? "embedded" : "online", format: useYrc ? "yrc" : "lrc" };
+    nowPlayingPushTrackAndLyric(toRaw(song), toRaw(lines), source);
   }
 
   /**

@@ -15,7 +15,12 @@ import { trySendCustomProtocol } from "./utils/protocol";
 import { initSingleLock } from "./utils/single-lock";
 import loadWindow from "./windows/load-window";
 import mainWindow from "./windows/main-window";
-import taskbarLyricManager from "./utils/taskbar-lyric-manager";
+import {
+  closeDesktopLyricWindow,
+  closeDynamicIslandWindow,
+  closeTaskbarLyricWindow,
+  restoreLyricWindows,
+} from "./windows/index-lyric";
 
 // 屏蔽报错
 process.env.ELECTRON_DISABLE_SECURITY_WARNINGS = "true";
@@ -77,15 +82,11 @@ class MainProcess {
         const responseHeaders = { ...details.responseHeaders };
         const url = new URL(details.url);
 
-        // 桌面歌词窗口需要透明背景，必须排除严格的安全策略
-        if (url.searchParams.get("win") === "desktop-lyric") {
+        // 歌词窗口（独立 vite entry）保持透明背景，跳过严格安全策略
+        if (url.pathname.startsWith("/windows/")) {
           callback({ responseHeaders });
           return;
         }
-
-        // 同样可以解决 CORS 限制，但为了避免安全问题，等真有需要的时候再开
-        // responseHeaders["Access-Control-Allow-Origin"] = ["*"];
-        // responseHeaders["Access-Control-Allow-Headers"] = ["*"];
 
         // COOP/COEP/CORP 配置
         responseHeaders["Cross-Origin-Opener-Policy"] = ["same-origin"];
@@ -106,6 +107,8 @@ class MainProcess {
       this.mainTray = initTray(this.mainWindow!);
       // 注册 IPC 通信
       initIpc();
+      // 启动后恢复关闭前打开的歌词窗口（在 IPC 注册之后，确保对应处理器可用）
+      restoreLyricWindows();
       // 自动启动 WebSocket
       SocketService.tryAutoStart();
     });
@@ -143,8 +146,10 @@ class MainProcess {
         unregisterShortcuts();
         // 清理媒体集成资源
         shutdownMedia();
-        // 销毁任务栏歌词窗口
-        taskbarLyricManager.destroyAll();
+        // 关闭歌词窗口
+        closeDesktopLyricWindow();
+        closeDynamicIslandWindow();
+        closeTaskbarLyricWindow();
         // 停止 MPV 服务
         const mpvService = MpvService.getInstance();
         try {

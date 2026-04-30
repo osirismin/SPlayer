@@ -1,5 +1,6 @@
 import { ipcMain } from "electron";
 import { SocketService } from "../services/SocketService";
+import * as nowPlaying from "../services/now-playing";
 import { processLog } from "../logger";
 import { useStore } from "../store";
 
@@ -86,13 +87,13 @@ const initSocketIpc = (): void => {
       data: { status, timestamp: Date.now() },
     });
   });
-  ipcMain.on("play-lyric-change", (_, lyricData) => {
-    // 是否存在歌词
-    const { lrcData, yrcData } = lyricData;
-    if (!lrcData && !yrcData) return;
+  // 歌词更新通过 NowPlayingService 总线广播（保留 lrcData/yrcData 字段以兼容外部 WebSocket 客户端）
+  nowPlaying.onLyricChange((snap) => {
+    const lines = snap.lyric;
+    if (!lines || lines.length === 0) return;
     socketService.broadcast({
       type: "lyric-change",
-      data: { lrcData, yrcData, timestamp: Date.now() },
+      data: { lrcData: lines, yrcData: lines, timestamp: Date.now() },
     });
   });
   ipcMain.on("play-song-change", (_, options) => {

@@ -13,7 +13,12 @@ import { join } from "path";
 import { trayLog } from "../logger";
 import { useStore } from "../store";
 import { appName, isMac, isWin } from "../utils/config";
-import lyricWindow from "../windows/lyric-window";
+import {
+  applyDesktopLyricLock,
+  toggleDesktopLyricWindow,
+  toggleDynamicIslandWindow,
+  toggleTaskbarLyricWindow,
+} from "../windows/index-lyric";
 
 // 播放模式
 type PlayState = "play" | "pause" | "loading";
@@ -27,6 +32,7 @@ let playName: string = "未播放歌曲";
 let likeSong: boolean = false;
 let desktopLyricShow: boolean = false;
 let desktopLyricLock: boolean = false;
+let dynamicIslandShow: boolean = false;
 let taskbarLyricShow: boolean = false;
 
 export interface MainTray {
@@ -37,6 +43,7 @@ export interface MainTray {
   setPlayName(name: string): void;
   setDesktopLyricShow(show: boolean): void;
   setDesktopLyricLock(lock: boolean): void;
+  setDynamicIslandShow(show: boolean): void;
   setTaskbarLyricShow(show: boolean): void;
   initTrayMenu(): void;
   destroyTray(): void;
@@ -208,7 +215,9 @@ const createTrayMenu = (win: BrowserWindow): MenuItemConstructorOptions[] => {
       id: "toggle-desktop-lyric",
       label: `${desktopLyricShow ? "关闭" : "开启"}桌面歌词`,
       icon: getMenuIcon("lyric"),
-      click: () => win.webContents.send("desktop-lyric:toggle"),
+      click: () => {
+        toggleDesktopLyricWindow();
+      },
     },
     {
       id: "toggle-desktop-lyric-lock",
@@ -217,11 +226,18 @@ const createTrayMenu = (win: BrowserWindow): MenuItemConstructorOptions[] => {
       visible: desktopLyricShow,
       click: () => {
         const store = useStore();
-        store.set("lyric.config", { ...store.get("lyric.config"), isLock: !desktopLyricLock });
-        const config = store.get("lyric.config");
-        const lyricWin = lyricWindow.getWin();
-        if (!lyricWin) return;
-        lyricWin.webContents.send("desktop-lyric:update-option", config);
+        const cfg = store.get("desktopLyric");
+        const next = { ...cfg, locked: !cfg.locked };
+        store.set("desktopLyric", next);
+        applyDesktopLyricLock(next.locked);
+      },
+    },
+    {
+      id: "toggle-dynamic-island",
+      label: `${dynamicIslandShow ? "关闭" : "开启"}灵动岛歌词`,
+      icon: getMenuIcon("lyric"),
+      click: () => {
+        toggleDynamicIslandWindow();
       },
     },
     {
@@ -229,7 +245,13 @@ const createTrayMenu = (win: BrowserWindow): MenuItemConstructorOptions[] => {
       label: `${(isMac ? isMacosLyricEnabled : taskbarLyricShow) ? "关闭" : "开启"}${isMac ? "状态栏" : "任务栏"}歌词`,
       icon: getMenuIcon("lyric"),
       visible: isWin || isMac,
-      click: () => win.webContents.send("toggle-taskbar-lyric"),
+      click: () => {
+        if (isMac) {
+          win.webContents.send("toggle-taskbar-lyric");
+        } else {
+          toggleTaskbarLyricWindow();
+        }
+      },
     },
     {
       type: "separator",
@@ -382,6 +404,16 @@ class CreateTray implements MainTray {
 
   setTaskbarLyricShow(show: boolean) {
     taskbarLyricShow = show;
+    // 更新菜单
+    this.initTrayMenu();
+  }
+
+  /**
+   * 灵动岛歌词开关
+   * @param show 灵动岛歌词开关状态
+   */
+  setDynamicIslandShow(show: boolean) {
+    dynamicIslandShow = show;
     // 更新菜单
     this.initTrayMenu();
   }

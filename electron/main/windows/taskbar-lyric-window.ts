@@ -1,3 +1,6 @@
+import { app, BrowserWindow, nativeTheme, screen } from "electron";
+import { join } from "node:path";
+import { debounce } from "lodash-es";
 import type {
   RegistryWatcher,
   TaskbarLayout,
@@ -5,530 +8,384 @@ import type {
   TrayWatcher,
   UiaWatcher,
 } from "@native/taskbar-lyric";
-import { TASKBAR_IPC_CHANNELS, type TaskbarConfig } from "@shared";
-import { app, type BrowserWindow, nativeTheme, screen } from "electron";
-import { debounce } from "lodash-es";
-import { join } from "node:path";
-import { processLog } from "../logger";
-import { useStore } from "../store";
-import { isDev, port } from "../utils/config";
-import { loadNativeModule } from "../utils/native-loader";
 import { createWindow } from "./index";
+import { useStore } from "../store";
+import { broadcast } from "../utils/broadcast";
+import { isAppQuitting } from "../utils/lifecycle";
+import { isDev, isWin, port } from "../utils/config";
+import { loadNativeModule } from "../utils/native-loader";
+import { processLog, windowsLog } from "../logger";
+import { getMainTray } from "../tray";
+import type { TaskbarLyricSettings } from "@shared/lyric-window";
 
-type taskbarLyricModule = typeof import("@native/taskbar-lyric");
+type TaskbarLyricNative = typeof import("@native/taskbar-lyric");
 
-const taskbarLyricNative: taskbarLyricModule = loadNativeModule(
-  "taskbar-lyric.node",
-  "taskbar-lyric",
-);
+let taskbarLyricWindow: BrowserWindow | null = null;
+let nativeModule: TaskbarLyricNative | null = null;
+let service: TaskbarService | null = null;
+let registryWatcher: RegistryWatcher | null = null;
+let uiaWatcher: UiaWatcher | null = null;
+let trayWatcher: TrayWatcher | null = null;
+let firstLayoutDone = false;
 
-if (taskbarLyricNative) {
-  try {
-    const logDir = join(app.getPath("userData"), "logs", "taskbar-lyric");
-    taskbarLyricNative.initLogger(logDir);
-    // processLog.info(`[TaskbarLyric] 日志初始化于 ${logDir}`);
-  } catch (e) {
-    processLog.error("[TaskbarLyric] 初始化日志失败", e);
+/**
+ * 初始尺寸故意开大（覆盖任何任务栏宽高）
+ * 关键原因：transparent + SetParent 后 Chromium 合成器视口不会随 setBounds 扩大，只会收缩
+ * 后续 setBounds 只做缩小，视口始终覆盖整个 HWND
+ */
+const INITIAL_WIDTH = 3000;
+const INITIAL_HEIGHT = 200;
+
+/** 默认布局重算间隙（避免过度抖动） */
+const debouncedUpdateLayout = debounce(() => {
+  service?.update(getDesiredPhysicalWidth());
+}, 150);
+
+/** 注册表变化触发的布局重算（多走一次去抖以等待 Explorer 完成调整） */
+const debouncedRegistryUpdate = debounce(() => {
+  service?.update(getDesiredPhysicalWidth());
+}, 500);
+
+const getDesiredPhysicalWidth = (): number => {
+  if (!isWin) return 0;
+  const store = useStore();
+  const config = store.get("taskbarLyric") as TaskbarLyricSettings | undefined;
+  const primary = screen.getPrimaryDisplay();
+  const scaleFactor = primary.scaleFactor;
+  if (!config || config.autoMaxWidth) {
+    return Math.round(primary.workAreaSize.width * scaleFactor);
   }
+  return Math.round(config.maxWidth * scaleFactor);
+};
+
+/**
+ * 把当前 native 输出的 TaskbarLayout 转成 left/right 可用空间 + 锚点选择
+ * 当前 native API 输出 win10/win11 两种布局，由本函数自行计算 Win11 居中模式下两侧空间
+ */
+interface PickedSpace {
+  rect: Electron.Rectangle;
+  anchor: "left" | "right";
+  isCentered: boolean;
+  systemType: string;
 }
 
-const taskbarLyricUrl =
-  isDev && process.env.ELECTRON_RENDERER_URL
-    ? `${process.env.ELECTRON_RENDERER_URL}/#/taskbar-lyric?win=taskbar-lyric`
-    : `http://localhost:${port}/#/taskbar-lyric?win=taskbar-lyric`;
+const GAP_LOGICAL = 10;
 
-class TaskbarLyricWindow {
-  private win: BrowserWindow | null = null;
-  private registryWatcher: RegistryWatcher | null = null;
-  private uiaWatcher: UiaWatcher | null = null;
-  private trayWatcher: TrayWatcher | null = null;
-  private themeListener: (() => void) | null = null;
-  private animationTimer: NodeJS.Timeout | null = null;
-  private service: TaskbarService | null = null;
-  private useAnimation = false;
-  private isNativeDisposed = false;
-  private isFadingOut = false;
-  private shouldBeVisible = false;
+const pickSpace = (layout: TaskbarLayout): PickedSpace | null => {
+  const store = useStore();
+  const config = store.get("taskbarLyric") as TaskbarLyricSettings | undefined;
+  const position = config?.position ?? "auto";
+  const primary = screen.getPrimaryDisplay();
+  const scaleFactor = primary.scaleFactor;
+  const GAP = GAP_LOGICAL * scaleFactor;
 
-  private debouncedUpdateLayout = debounce(() => {
-    this.updateLayout(true);
-  }, 150);
-
-  private debouncedRegistryUpdate = debounce(() => {
-    this.updateLayout(false);
-    this.win?.webContents.send("taskbar:fade-in");
-  }, 500);
-
-  create(): BrowserWindow | null {
-    if (this.win && !this.win.isDestroyed()) {
-      this.win.show();
-      return this.win;
-    }
-
-    this.isNativeDisposed = false;
-
-    if (taskbarLyricNative?.TaskbarService) {
-      try {
-        this.service = new taskbarLyricNative.TaskbarService(
-          (err: Error | null, layout: TaskbarLayout) => {
-            if (err) {
-              processLog.error("[TaskbarLyric] Rust Worker 回调错误", err);
-              return;
-            }
-            this.applyLayout(layout);
-          },
-        );
-      } catch (e) {
-        processLog.error("[TaskbarLyric] 初始化 TaskbarService 失败", e);
-      }
-    }
-
-    const primaryDisplay = screen.getPrimaryDisplay();
-    const maxWindowWidth = primaryDisplay.workAreaSize.width;
-    // 初始尺寸故意开大（覆盖任何可能的任务栏宽高），避免 transparent+SetParent 后
-    // Chromium 合成器视口不随 setBounds 增长、超出初始尺寸区域因 alpha=0 吞掉鼠标事件
-    // （表现为"只有前面一点点可以操作"）。后续 setBounds 只做缩小，视口始终覆盖整个 HWND
-    this.win = createWindow({
-      width: 3000,
-      height: 200,
-      minWidth: 0,
-      minHeight: 0,
-      maxWidth: maxWindowWidth,
-      maxHeight: 200,
-      type: "toolbar",
-      frame: false,
-      transparent: true,
-      backgroundColor: "#00000000",
-      hasShadow: false,
-      show: false,
-      skipTaskbar: true,
-      minimizable: false,
-      maximizable: false,
-      fullscreenable: false,
-      resizable: false,
-      webPreferences: {
-        zoomFactor: 1.0,
-        partition: "persist:taskbar-lyric",
-      },
-    });
-
-    if (!this.win) return null;
-
-    this.win.loadURL(taskbarLyricUrl);
-
-    // 因为任务栏窗口非常小，默认嵌入的开发者工具完全无法使用，
-    // 所以监听 F12 并按分离模式打开开发者工具
-    this.win.webContents.on("before-input-event", (event, input) => {
-      if (input.key === "F12" && input.type === "keyDown") {
-        if (this.win?.webContents.isDevToolsOpened()) {
-          this.win?.webContents.closeDevTools();
-        } else {
-          this.win?.webContents.openDevTools({ mode: "detach" });
-        }
-        event.preventDefault();
-      }
-    });
-
-    const sendTheme = () => {
-      if (this.win && !this.win.isDestroyed()) {
-        const isDark = nativeTheme.shouldUseDarkColors;
-        this.win.webContents.send(TASKBAR_IPC_CHANNELS.SYNC_STATE, {
-          type: "system-theme",
-          data: { isDark },
-        });
-      }
+  if (layout.systemType === "win10" && layout.win10) {
+    const { x, y, width, height } = layout.win10.lyricArea;
+    return {
+      rect: { x, y, width, height },
+      anchor: "left",
+      isCentered: false,
+      systemType: "win10",
     };
-
-    if (!this.themeListener) {
-      this.themeListener = sendTheme;
-      nativeTheme.on("updated", this.themeListener);
-    }
-
-    sendTheme();
-
-    this.win.once("ready-to-show", () => {
-      if (this.win) {
-        this.embed();
-        // 不在此处 show，让 applyLayout 首次 setBounds 到正确尺寸后再触发 show
-        // （applyLayout 里 shouldBeVisible && !isVisible 的分支会处理），
-        // 避免 3000x200 的初始大窗口在屏幕上闪现
-        this.updateLayout(false);
-        sendTheme();
-      }
-    });
-
-    if (taskbarLyricNative) {
-      if (!this.registryWatcher && taskbarLyricNative.RegistryWatcher) {
-        try {
-          this.registryWatcher = new taskbarLyricNative.RegistryWatcher(() => {
-            this.win?.webContents.send("taskbar:fade-out");
-            this.debouncedRegistryUpdate();
-          });
-        } catch (e) {
-          processLog.error("[TaskbarLyric] 启动 RegistryWatcher 失败", e);
-        }
-      }
-
-      if (!this.uiaWatcher && taskbarLyricNative.UiaWatcher) {
-        try {
-          this.uiaWatcher = new taskbarLyricNative.UiaWatcher(() => {
-            this.debouncedUpdateLayout();
-          });
-        } catch (e) {
-          processLog.error("[TaskbarLyric] 启动 UiaWatcher 失败", e);
-        }
-      }
-
-      if (!this.trayWatcher && taskbarLyricNative.TrayWatcher) {
-        try {
-          this.trayWatcher = new taskbarLyricNative.TrayWatcher(() => {
-            this.debouncedUpdateLayout();
-          });
-        } catch (e) {
-          processLog.error("[TaskbarLyric] 启动 TrayWatcher 失败", e);
-        }
-      }
-    }
-
-    this.win.on("closed", () => {
-      this.destroy();
-      this.win = null;
-    });
-
-    return this.win;
   }
 
-  /**
-   * 保留接口用于 manager 分发兼容（floating 模式使用）；taskbar 模式不需要根据
-   * 内容宽度动态收缩，窗口按 autoMaxWidth/maxWidth 设置占空间
-   */
-  setContentWidth(_width: number) {
-    // no-op
+  if (layout.systemType === "win11" && layout.win11) {
+    const { startButton, widgets, content, tray, isCentered } = layout.win11;
+    let effectiveRightAnchor = tray.x;
+    const contentRightEdge = content.x + content.width;
+    if (widgets.width > 0 && widgets.x > contentRightEdge) {
+      if (widgets.x < tray.x) effectiveRightAnchor = widgets.x;
+    }
+    const rightSpaceRaw = effectiveRightAnchor - contentRightEdge;
+    const rightSpaceNet = rightSpaceRaw - GAP;
+
+    const widgetsRightEdge = widgets.width > 0 ? widgets.x + widgets.width : 0;
+    const startLeftEdge = startButton.x;
+    const leftSpaceRaw = startLeftEdge - widgetsRightEdge;
+    const leftSpaceNet = leftSpaceRaw - GAP;
+
+    let chosenAnchor: "left" | "right" = "right";
+    let chosenWidth = 0;
+    let chosenX = 0;
+
+    if (position === "left" && isCentered && leftSpaceNet > 0) {
+      chosenAnchor = "left";
+      chosenWidth = leftSpaceNet;
+      chosenX = widgetsRightEdge + GAP;
+    } else if (position === "right") {
+      chosenAnchor = "right";
+      chosenWidth = Math.max(0, rightSpaceNet);
+      chosenX = effectiveRightAnchor - chosenWidth - GAP;
+    } else if (isCentered && leftSpaceNet >= rightSpaceNet && leftSpaceNet > 0) {
+      chosenAnchor = "left";
+      chosenWidth = leftSpaceNet;
+      chosenX = widgetsRightEdge + GAP;
+    } else {
+      chosenAnchor = "right";
+      chosenWidth = Math.max(0, rightSpaceNet);
+      chosenX = effectiveRightAnchor - chosenWidth - GAP;
+    }
+
+    if (chosenWidth <= 0) return null;
+
+    return {
+      rect: { x: chosenX, y: 0, width: chosenWidth, height: tray.height },
+      anchor: chosenAnchor,
+      isCentered,
+      systemType: "win11",
+    };
   }
 
-  embed() {
-    if (!this.win || !this.service) return;
+  return null;
+};
+
+/** 应用布局 */
+const applyLayout = (layout: TaskbarLayout | null): void => {
+  if (!layout) return;
+  const win = getTaskbarLyricWindow();
+  if (!win) return;
+
+  const picked = pickSpace(layout);
+  if (!picked) {
+    if (win.isVisible()) win.hide();
+    return;
+  }
+
+  const primary = screen.getPrimaryDisplay();
+  const scaleFactor = primary.scaleFactor;
+
+  // 物理像素 → DIP
+  const availX = Math.round(picked.rect.x / scaleFactor);
+  const availY = Math.round(picked.rect.y / scaleFactor);
+  const availWidth = Math.round(picked.rect.width / scaleFactor);
+  const availHeight = Math.round(picked.rect.height / scaleFactor);
+
+  const store = useStore();
+  const config = store.get("taskbarLyric") as TaskbarLyricSettings | undefined;
+  const autoMaxWidth = config?.autoMaxWidth ?? true;
+  const maxWidth = config?.maxWidth ?? 400;
+  const windowWidth = autoMaxWidth ? availWidth : Math.min(maxWidth, availWidth);
+  const windowX = picked.anchor === "right" ? availX + availWidth - windowWidth : availX;
+
+  win.setBounds({ x: windowX, y: availY, width: windowWidth, height: availHeight });
+
+  if (!firstLayoutDone) {
+    firstLayoutDone = true;
+    win.show();
+  }
+
+  // 主题：使用 nativeTheme 反推 isLight
+  const isLight = !nativeTheme.shouldUseDarkColors;
+
+  win.webContents.send("taskbarLyric:layout", {
+    isCentered: picked.isCentered,
+    systemType: picked.systemType,
+    isLight,
+    anchor: picked.anchor,
+  });
+};
+
+const tryStart = <T>(name: string, factory: () => T): T | null => {
+  try {
+    return factory();
+  } catch (error) {
+    windowsLog.warn(`[taskbar-lyric] ${name} 启动失败`, error);
+    return null;
+  }
+};
+
+const startWatchers = (mod: TaskbarLyricNative): void => {
+  registryWatcher = tryStart(
+    "RegistryWatcher",
+    () =>
+      new mod.RegistryWatcher((err) => {
+        if (err) windowsLog.error("[taskbar-lyric] RegistryWatcher cb err", err);
+        else debouncedRegistryUpdate();
+      }),
+  );
+  uiaWatcher = tryStart(
+    "UiaWatcher",
+    () =>
+      new mod.UiaWatcher((err) => {
+        if (err) windowsLog.error("[taskbar-lyric] UiaWatcher cb err", err);
+        else debouncedUpdateLayout();
+      }),
+  );
+  trayWatcher = tryStart(
+    "TrayWatcher",
+    () =>
+      new mod.TrayWatcher((err) => {
+        if (err) windowsLog.error("[taskbar-lyric] TrayWatcher cb err", err);
+        else debouncedUpdateLayout();
+      }),
+  );
+};
+
+const stopAllWatchers = (): void => {
+  registryWatcher?.stop();
+  registryWatcher = null;
+  uiaWatcher?.stop();
+  uiaWatcher = null;
+  trayWatcher?.stop();
+  trayWatcher = null;
+  service?.stop();
+  service = null;
+};
+
+/** 创建任务栏歌词窗口（仅 Windows） */
+export const createTaskbarLyricWindow = (): BrowserWindow | null => {
+  if (!isWin) {
+    windowsLog.warn("[taskbar-lyric] 仅 Windows 支持");
+    return null;
+  }
+
+  if (taskbarLyricWindow && !taskbarLyricWindow.isDestroyed()) {
+    taskbarLyricWindow.show();
+    return taskbarLyricWindow;
+  }
+
+  if (!nativeModule) {
+    nativeModule = loadNativeModule(
+      "taskbar-lyric.node",
+      "taskbar-lyric",
+    ) as TaskbarLyricNative | null;
+    if (!nativeModule) {
+      windowsLog.error("[taskbar-lyric] 原生模块加载失败");
+      return null;
+    }
     try {
-      const handle = this.win.getNativeWindowHandle();
-      this.service.embedWindow(handle);
+      const logDir = join(app.getPath("userData"), "logs", "taskbar-lyric");
+      nativeModule.initLogger(logDir);
     } catch (e) {
-      processLog.error("[TaskbarLyric] 嵌入窗口失败", e);
+      processLog.error("[taskbar-lyric] 初始化日志失败", e);
     }
   }
 
-  /** 返回期望的 HWND 物理像素宽度（autoMaxWidth 开启时返回屏幕宽度，由 Rust 侧据可用空间裁剪） */
-  private getDesiredPhysicalWidth() {
-    const store = useStore();
-    const primaryDisplay = screen.getPrimaryDisplay();
-    const scaleFactor = primaryDisplay.scaleFactor;
-    const autoMaxWidth = store.get("taskbar.autoMaxWidth", true);
-    if (autoMaxWidth) {
-      // 尽量撑满可用空间
-      return Math.round(primaryDisplay.workAreaSize.width * scaleFactor);
-    }
-    const maxWidthLogical = store.get("taskbar.maxWidth", 400);
-    return Math.round(maxWidthLogical * scaleFactor);
-  }
-
-  updateLayout(animate: boolean = false) {
-    if (!this.win || !this.service) return;
-    this.useAnimation = animate;
-    this.service.update(this.getDesiredPhysicalWidth());
-  }
-
-  private applyLayout(layout: TaskbarLayout | null) {
-    if (!layout) {
-      processLog.warn("[TaskbarLyric] applyLayout 收到空布局");
-      return;
-    }
-
-    if (!this.win || this.win.isDestroyed()) return;
-
-    try {
-      const primaryDisplay = screen.getPrimaryDisplay();
-      const scaleFactor = primaryDisplay.scaleFactor;
-      const store = useStore();
-      const GAP = store.get("taskbar.margin", 10) * scaleFactor;
-      const positionSetting = store.get("taskbar.position", "automatic") as TaskbarConfig["position"];
-      // autoMaxWidth 开启时无上限（撑满可用空间），关闭时按设置的像素值（逻辑像素）限制
-      const autoMaxWidth = store.get("taskbar.autoMaxWidth", true);
-      const maxWidthLogical = store.get("taskbar.maxWidth", 400);
-      const MAX_WIDTH_PHYSICAL = autoMaxWidth
-        ? Number.POSITIVE_INFINITY
-        : maxWidthLogical * scaleFactor;
-
-      let targetBounds: Electron.Rectangle = {
-        x: 0,
-        y: 0,
-        width: 0,
-        height: 0,
-      };
-      // isCenter determines the alignment mode for the Vue component.
-      // true: Left Aligned (Cover Left)
-      // false: Right Aligned (Cover Right)
-      let shouldCenter = false;
-
-      if (layout.systemType === "win10" && layout.win10) {
-        const { x, y, width, height } = layout.win10.lyricArea;
-        targetBounds = { x, y, width, height };
-        shouldCenter = false;
-      } else if (layout.systemType === "win11" && layout.win11) {
-        const { startButton, widgets, content, tray, isCentered } = layout.win11;
-
-        let effectiveRightAnchor = tray.x;
-        const contentRightEdge = content.x + content.width;
-        if (widgets.width > 0 && widgets.x > contentRightEdge) {
-          if (widgets.x < tray.x) effectiveRightAnchor = widgets.x;
-        }
-        const rightSpaceRaw = effectiveRightAnchor - contentRightEdge;
-        const rightSpaceNet = rightSpaceRaw - GAP;
-
-        const widgetsRightEdge = widgets.width > 0 ? widgets.x + widgets.width : 0;
-        const startLeftEdge = startButton.x;
-        const leftSpaceRaw = startLeftEdge - widgetsRightEdge;
-        const leftSpaceNet = leftSpaceRaw - GAP;
-
-        let finalPhysicalX = 0;
-        const finalPhysicalY = 0;
-        let finalPhysicalWidth = 0;
-
-        // 取可用空间与最大宽度限制的较小值；空间 <= 0 时返回 0 表示该侧不可用
-        const clampWidth = (space: number) => {
-          if (space <= 0) return 0;
-          return Math.min(space, MAX_WIDTH_PHYSICAL);
-        };
-
-        if (positionSetting === "left" && isCentered) {
-          // 强制左侧 (仅在 Win11 居中模式下有效)
-          finalPhysicalWidth = clampWidth(leftSpaceNet);
-          finalPhysicalX = widgetsRightEdge + GAP;
-          shouldCenter = true; // Left Align
-        } else if (positionSetting === "right") {
-          // 强制右侧
-          finalPhysicalWidth = clampWidth(rightSpaceNet);
-          finalPhysicalX = effectiveRightAnchor - finalPhysicalWidth - GAP;
-          shouldCenter = false; // Right Align
-        } else if (isCentered) {
-          // 自动判断 (Win11 居中): 选空间大的一侧
-          if (leftSpaceNet >= rightSpaceNet && leftSpaceNet > 0) {
-            finalPhysicalWidth = clampWidth(leftSpaceNet);
-            finalPhysicalX = widgetsRightEdge + GAP;
-            shouldCenter = true; // Left Align
-          } else {
-            finalPhysicalWidth = clampWidth(rightSpaceNet);
-            finalPhysicalX = effectiveRightAnchor - finalPhysicalWidth - GAP;
-            shouldCenter = false; // Right Align
-          }
-        } else {
-          // Win11 左对齐 (仅右侧可用)
-          finalPhysicalWidth = clampWidth(rightSpaceNet);
-          finalPhysicalX = effectiveRightAnchor - finalPhysicalWidth - GAP;
-          shouldCenter = false; // Right Align
-        }
-
-        if (finalPhysicalWidth <= 0) {
-          processLog.warn("[TaskbarLyric] 无可用空间");
-          this.win.hide();
-          return;
-        }
-
-        targetBounds = {
-          x: finalPhysicalX,
-          y: finalPhysicalY,
-          width: finalPhysicalWidth,
-          height: tray.height,
-        };
-      }
-
-      const finalBounds = {
-        x: Math.round(targetBounds.x / scaleFactor),
-        y: Math.round(targetBounds.y / scaleFactor),
-        width: Math.round(targetBounds.width / scaleFactor),
-        height: Math.round(targetBounds.height / scaleFactor),
-      };
-
-      // processLog.info(JSON.stringify(finalBounds));
-
-      // 空间恢复后自动重新显示
-      if (this.shouldBeVisible && !this.win.isVisible()) {
-        this.win.show();
-      }
-
-      if (this.useAnimation) {
-        this.animateToBounds(finalBounds);
-      } else {
-        if (this.animationTimer) clearInterval(this.animationTimer);
-        this.win.setBounds(finalBounds);
-      }
-
-      this.win.webContents.send("taskbar:update-layout", {
-        isCenter: shouldCenter,
-      });
-    } catch (e) {
-      processLog.error("[TaskbarLyric] 应用布局失败", e);
-    }
-  }
-
-  private animateToBounds(target: Electron.Rectangle) {
-    if (!this.win || this.win.isDestroyed()) return;
-
-    const screenBounds = this.win.getBounds();
-
-    const start = {
-      x: screenBounds.x,
-      y: target.y,
-      width: screenBounds.width,
-      height: target.height,
-    };
-
-    if (Math.abs(start.x - target.x) < 2 && Math.abs(start.width - target.width) < 2) {
-      this.win.setBounds(target);
-      return;
-    }
-
-    if (this.animationTimer) clearInterval(this.animationTimer);
-
-    const primaryDisplay = screen.getPrimaryDisplay();
-    const refreshRate = primaryDisplay.displayFrequency || 60;
-    const interval = 1000 / refreshRate;
-
-    const duration = 300;
-    const startTime = Date.now();
-
-    const easeOutCubic = (t: number): number => {
-      return 1 - (1 - t) ** 3;
-    };
-
-    this.animationTimer = setInterval(() => {
-      if (!this.win || this.win.isDestroyed()) {
-        if (this.animationTimer) clearInterval(this.animationTimer);
+  try {
+    service = new nativeModule.TaskbarService((err: Error | null, layout: TaskbarLayout) => {
+      if (err) {
+        processLog.error("[taskbar-lyric] Rust Worker 回调错误", err);
         return;
       }
-
-      const now = Date.now();
-      const progress = Math.min((now - startTime) / duration, 1);
-      const ease = easeOutCubic(progress);
-
-      const currentBounds = {
-        x: Math.round(start.x + (target.x - start.x) * ease),
-        y: target.y,
-        width: Math.round(start.width + (target.width - start.width) * ease),
-        height: target.height,
-      };
-
-      this.win.setBounds(currentBounds);
-
-      if (progress >= 1) {
-        if (this.animationTimer) clearInterval(this.animationTimer);
-        this.animationTimer = null;
-        this.win.setBounds(target);
-      }
-    }, interval);
+      applyLayout(layout);
+    });
+  } catch (e) {
+    windowsLog.error("[taskbar-lyric] 初始化 TaskbarService 失败", e);
+    return null;
   }
 
-  public setVisibility(shouldShow: boolean) {
-    this.shouldBeVisible = shouldShow;
+  const win = createWindow({
+    width: INITIAL_WIDTH,
+    height: INITIAL_HEIGHT,
+    minWidth: 0,
+    minHeight: 0,
+    type: "toolbar",
+    title: "Taskbar Lyric",
+    frame: false,
+    transparent: true,
+    hasShadow: false,
+    resizable: false,
+    movable: false,
+    minimizable: false,
+    maximizable: false,
+    fullscreenable: false,
+    skipTaskbar: true,
+    show: false,
+    backgroundColor: "#00000000",
+    webPreferences: {
+      disableDialogs: true,
+      zoomFactor: 1.0,
+    },
+  });
 
-    if (!this.win || this.win.isDestroyed()) return;
-
-    if (shouldShow) {
-      this.isFadingOut = false;
-
-      if (!this.win.isVisible()) {
-        this.win.show();
-      }
-
-      this.win.webContents.send("taskbar:fade-in");
-    } else {
-      if (this.win.isVisible() && !this.isFadingOut) {
-        this.isFadingOut = true;
-        this.win.webContents.send("taskbar:fade-out");
-      }
-    }
+  if (!win) {
+    windowsLog.error("[taskbar-lyric] createWindow 失败");
+    service?.stop();
+    service = null;
+    return null;
   }
 
-  public handleFadeDone() {
-    if (this.isFadingOut && this.win && !this.win.isDestroyed()) {
-      this.win.hide();
-      this.isFadingOut = false;
-    }
-  }
+  taskbarLyricWindow = win;
+  firstLayoutDone = false;
 
-  public destroy() {
-    if (this.isNativeDisposed) return;
-    this.debouncedUpdateLayout.cancel();
-    this.debouncedRegistryUpdate.cancel();
-    if (this.themeListener) {
-      nativeTheme.removeListener("updated", this.themeListener);
-      this.themeListener = null;
-    }
-    if (this.registryWatcher) {
-      try {
-        this.registryWatcher.stop();
-      } catch (e) {
-        processLog.error(e);
-      }
-      this.registryWatcher = null;
-    }
+  const url =
+    isDev && process.env["ELECTRON_RENDERER_URL"]
+      ? `${process.env["ELECTRON_RENDERER_URL"]}/windows/taskbar-lyric/index.html`
+      : `http://localhost:${port}/windows/taskbar-lyric/index.html`;
+  win.loadURL(url);
 
-    if (this.uiaWatcher) {
-      try {
-        this.uiaWatcher.stop();
-      } catch (e) {
-        processLog.error(e);
-      }
-      this.uiaWatcher = null;
-    }
-
-    if (this.trayWatcher) {
-      try {
-        this.trayWatcher.stop();
-      } catch (e) {
-        processLog.error(e);
-      }
-      this.trayWatcher = null;
-    }
-
-    if (this.service) {
-      try {
-        this.service.stop();
-      } catch (e) {
-        processLog.error("停止 TaskbarService 失败", e);
-      }
-      this.service = null;
-    }
-
-    this.isNativeDisposed = true;
-  }
-
-  close(animate: boolean = true) {
-    this.destroy();
-    if (this.animationTimer) {
-      clearInterval(this.animationTimer);
-      this.animationTimer = null;
-    }
-    if (this.win && !this.win.isDestroyed()) {
-      if (animate) {
-        this.win.webContents.send("taskbar:fade-out");
-        const winToClose = this.win;
-        setTimeout(() => {
-          if (winToClose && !winToClose.isDestroyed()) {
-            winToClose.close();
-          }
-        }, 350);
+  win.webContents.on("before-input-event", (event, input) => {
+    if (input.key === "F12" && input.type === "keyDown") {
+      if (win.webContents.isDevToolsOpened()) {
+        win.webContents.closeDevTools();
       } else {
-        this.win.close();
+        win.webContents.openDevTools({ mode: "detach" });
       }
-    } else {
-      this.win = null;
+      event.preventDefault();
     }
-  }
+  });
 
-  send(channel: string, ...args: unknown[]) {
-    if (this.win && !this.win.isDestroyed()) {
-      this.win.webContents.send(channel, ...args);
+  win.once("ready-to-show", () => {
+    if (!service || !nativeModule) return;
+    try {
+      const handle = win.getNativeWindowHandle();
+      service.embedWindow(handle);
+      service.update(getDesiredPhysicalWidth());
+      startWatchers(nativeModule);
+    } catch (e) {
+      windowsLog.error("[taskbar-lyric] 嵌入窗口失败", e);
     }
-  }
-}
+  });
 
-export default new TaskbarLyricWindow();
+  win.on("closed", () => {
+    stopAllWatchers();
+    taskbarLyricWindow = null;
+    firstLayoutDone = false;
+    broadcast("taskbarLyric:visibilityChange", false);
+    getMainTray()?.setTaskbarLyricShow(false);
+    if (!isAppQuitting()) {
+      const s = useStore();
+      s.set("windowStates", {
+        ...s.get("windowStates"),
+        taskbarLyric: { visible: false },
+      });
+    }
+  });
+
+  const store = useStore();
+  store.set("windowStates", {
+    ...store.get("windowStates"),
+    taskbarLyric: { visible: true },
+  });
+  broadcast("taskbarLyric:visibilityChange", true);
+  getMainTray()?.setTaskbarLyricShow(true);
+
+  return win;
+};
+
+/** 关闭任务栏歌词窗口 */
+export const closeTaskbarLyricWindow = (): void => {
+  if (taskbarLyricWindow && !taskbarLyricWindow.isDestroyed()) {
+    taskbarLyricWindow.close();
+  }
+};
+
+/** 切换任务栏歌词窗口；返回切换后是否打开 */
+export const toggleTaskbarLyricWindow = (): boolean => {
+  if (taskbarLyricWindow && !taskbarLyricWindow.isDestroyed()) {
+    closeTaskbarLyricWindow();
+    return false;
+  }
+  return createTaskbarLyricWindow() !== null;
+};
+
+/** 获取任务栏歌词窗口实例 */
+export const getTaskbarLyricWindow = (): BrowserWindow | null => {
+  if (taskbarLyricWindow && !taskbarLyricWindow.isDestroyed()) return taskbarLyricWindow;
+  return null;
+};
+
+/** 触发一次布局重算（配置变更后调用） */
+export const applyTaskbarLyricLayout = (): void => {
+  service?.update(getDesiredPhysicalWidth());
+};

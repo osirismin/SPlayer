@@ -1,9 +1,7 @@
 import { defineStore } from "pinia";
 import type { SongType } from "@/types/main";
 import { isElectron } from "@/utils/env";
-import { cloneDeep } from "lodash-es";
 import { SongLyric } from "@/types/lyric";
-import { sendTaskbarLyrics } from "@/core/player/PlayerIpc";
 
 interface MusicState {
   playSong: SongType;
@@ -105,21 +103,7 @@ export const useMusicStore = defineStore("music", {
           yrcData: updates.yrcData ?? this.songLyric.yrcData,
         };
       }
-      // 更新歌词窗口数据
-      if (isElectron) {
-        // 桌面歌词
-        window.electron.ipcRenderer.send(
-          "play-lyric-change",
-          cloneDeep({
-            songId: this.playSong?.id,
-            lyricLoading: false,
-            lrcData: this.songLyric.lrcData ?? [],
-            yrcData: this.songLyric.yrcData ?? [],
-          }),
-        );
-        // 状态栏歌词
-        sendTaskbarLyrics(this.songLyric);
-      }
+      // 三种歌词窗口由 LyricManager 在解析完成后通过 NowPlayingService 总线统一推送
     },
     // 获取歌曲封面
     getSongCover(size: "s" | "m" | "l" | "xl" | "cover" = "s") {

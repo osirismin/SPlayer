@@ -3,4 +3,6 @@
  */
 
 export * from "./play-mode";
-export * from "./taskbar-ipc";
+export * from "./lyrics";
+export * from "./now-playing";
+export * from "./lyric-window";

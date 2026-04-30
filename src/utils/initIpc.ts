@@ -1,13 +1,10 @@
 import { usePlayerController } from "@/core/player/PlayerController";
-import * as playerIpc from "@/core/player/PlayerIpc";
 import { useDataStore, useMusicStore, useSettingStore, useStatusStore } from "@/stores";
 import type { SettingType } from "@/types/main";
-import { TASKBAR_IPC_CHANNELS, type TaskbarConfig } from "@/types/shared";
 import { handleProtocolUrl } from "@/utils/protocol";
 import { cloneDeep } from "lodash-es";
 import { toRaw } from "vue";
 import { toLikeSong } from "./auth";
-import { sendTaskbarCoverColor } from "./color";
 import { isElectron, isMac } from "./env";
 import { getPlayerInfoObj } from "./format";
 import { openSetting, openUpdateApp } from "./modal";
@@ -55,24 +52,16 @@ const initIpc = () => {
     window.electron.ipcRenderer.on("openSetting", (_, type: SettingType, scrollTo?: string) =>
       openSetting(type, scrollTo),
     );
-    // 桌面歌词开关
-    window.electron.ipcRenderer.on("desktop-lyric:toggle", () => player.toggleDesktopLyric());
-    // 显式关闭桌面歌词
-    window.electron.ipcRenderer.on("desktop-lyric:close", () => player.setDesktopLyricShow(false));
-    // 任务栏歌词开关
+    // mac 状态栏歌词开关（仅 mac 托盘菜单使用此通道）
     window.electron.ipcRenderer.on("toggle-taskbar-lyric", async () => {
-      if (isMac) {
-        const currentMacLyricEnabled = await window.electron.ipcRenderer.invoke(
-          "store-get",
-          "macos.statusBarLyric.enabled",
-        );
-        const newState = !currentMacLyricEnabled;
-        window.electron.ipcRenderer.send("macos-lyric:toggle", newState);
-        const message = `${newState ? "已开启" : "已关闭"}状态栏歌词`;
-        window.$message.success(message);
-      } else {
-        player.toggleTaskbarLyric();
-      }
+      if (!isMac) return;
+      const currentMacLyricEnabled = await window.electron.ipcRenderer.invoke(
+        "store-get",
+        "macos.statusBarLyric.enabled",
+      );
+      const newState = !currentMacLyricEnabled;
+      window.electron.ipcRenderer.send("macos-lyric:toggle", newState);
+      window.$message.success(`${newState ? "已开启" : "已关闭"}状态栏歌词`);
     });
 
     // 监听主进程发来的 macOS 状态栏歌词启用状态更新
@@ -84,79 +73,7 @@ const initIpc = () => {
       },
     );
 
-    // 给任务栏歌词初始数据
-window.electron.ipcRenderer.on(TASKBAR_IPC_CHANNELS.REQUEST_DATA, async () => {
-      const musicStore = useMusicStore();
-      const statusStore = useStatusStore();
-
-      const { name, artist } = getPlayerInfoObj() || {};
-      const cover = musicStore.getSongCover("s") || "";
-
-      const configPayload: TaskbarConfig =
-        (await window.electron.ipcRenderer.invoke(TASKBAR_IPC_CHANNELS.GET_OPTION)) ?? {};
-
-      const hasYrc = (musicStore.songLyric.yrcData?.length ?? 0) > 0;
-      const lyricsPayload = {
-        lines: toRaw(hasYrc ? musicStore.songLyric.yrcData : musicStore.songLyric.lrcData) ?? [],
-        type: (hasYrc ? "word" : "line") as "line" | "word",
-      };
-
-      playerIpc.broadcastTaskbarState({
-        type: "full-hydration",
-        data: {
-          track: {
-            title: name || "",
-            artist: artist || "",
-            cover: cover,
-          },
-          lyrics: lyricsPayload,
-          lyricLoading: statusStore.lyricLoading,
-          playback: {
-            isPlaying: statusStore.playStatus,
-            tick: [
-              statusStore.currentTime,
-              statusStore.duration,
-              statusStore.getSongOffset(musicStore.playSong?.id),
-            ],
-          },
-          config: configPayload,
-          themeColor: null, // TODO:
-        },
-      });
-
-      // macOS 状态栏歌词进度数据
-      window.electron.ipcRenderer.send("mac-statusbar:update-progress", {
-        currentTime: statusStore.currentTime,
-        duration: statusStore.duration,
-        offset: statusStore.getSongOffset(musicStore.playSong?.id),
-      });
-      // 发送封面颜色
-      sendTaskbarCoverColor();
-    });
-
-    // 请求歌词数据
-    window.electron.ipcRenderer.on("desktop-lyric:request-data", () => {
-      const musicStore = useMusicStore();
-      const statusStore = useStatusStore();
-      if (player) {
-        const { name, artist } = getPlayerInfoObj() || {};
-        window.electron.ipcRenderer.send(
-          "desktop-lyric:update-data",
-          cloneDeep({
-            playStatus: statusStore.playStatus,
-            playName: name,
-            artistName: artist,
-            currentTime: statusStore.currentTime,
-            songId: musicStore.playSong?.id,
-            songOffset: statusStore.getSongOffset(musicStore.playSong?.id),
-            lrcData: musicStore.songLyric.lrcData ?? [],
-            yrcData: musicStore.songLyric.yrcData ?? [],
-            lyricIndex: statusStore.lyricIndex,
-            lyricLoading: statusStore.lyricLoading,
-          }),
-        );
-      }
-    });
+    // 旧的桌面/任务栏歌词请求处理已移除，三种歌词窗口通过 NowPlayingService 总线自动同步
     // 无更新
     window.electron.ipcRenderer.on("update-not-available", () => {
       closeUpdateStatus();

@@ -95,7 +95,10 @@ const amLyricsData = computed(() => {
     // 处理显隐
     if (!showTran) line.translatedLyric = "";
     if (!showRoma) line.romanLyric = "";
-    if (!showWordsRoma) line.words?.forEach((word) => delete word.romanWord);
+    if (!showWordsRoma)
+      line.words?.forEach((word) => {
+        word.romanWord = "";
+      });
     // 调换翻译与音译位置
     if (swapTranRoma) {
       const temp = line.translatedLyric;

@@ -2,8 +2,7 @@ import { mediaSessionManager } from "@/core/player/MediaSessionManager";
 import { usePlayerController } from "@/core/player/PlayerController";
 import { useDownloadManager } from "@/core/resource/DownloadManager";
 import { useDataStore, useSettingStore, useShortcutStore, useStatusStore } from "@/stores";
-import { TASKBAR_IPC_CHANNELS } from "@/types/shared";
-import { isElectron, isMac } from "@/utils/env";
+import { isElectron } from "@/utils/env";
 import { printVersion } from "@/utils/log";
 import { openUserAgreement } from "@/utils/modal";
 import { useEventListener } from "@vueuse/core";
@@ -29,7 +28,19 @@ export const useInit = () => {
   // 事件监听
   initEventListener();
 
-    onMounted(async () => {
+  // 同步歌词窗口可见性到 statusStore（覆盖 X 按钮 / 托盘 / 设置面板等所有触发途径）
+  if (isElectron) {
+    window.api.window.isDesktopLyricOpen().then((v) => (statusStore.showDesktopLyric = !!v));
+    window.api.window.isTaskbarLyricOpen().then((v) => (statusStore.showTaskbarLyric = !!v));
+    window.api.desktopLyric.onVisibilityChange((visible) => {
+      statusStore.showDesktopLyric = visible;
+    });
+    window.api.taskbarLyric.onVisibilityChange((visible) => {
+      statusStore.showTaskbarLyric = visible;
+    });
+  }
+
+  onMounted(async () => {
     // 检查并执行设置迁移
     settingStore.checkAndMigrate();
     // 打印版本信息
@@ -76,25 +87,9 @@ export const useInit = () => {
       downloadManager.init();
       // 显示窗口
       window.electron.ipcRenderer.send("win-loaded");
-      // 同步任务栏歌词状态
-      const taskbarConfig = await window.electron.ipcRenderer.invoke(
-        TASKBAR_IPC_CHANNELS.GET_OPTION,
-      );
-      statusStore.showTaskbarLyric = taskbarConfig?.enabled ?? statusStore.showTaskbarLyric ?? false;
-      window.electron.ipcRenderer.send(
-        TASKBAR_IPC_CHANNELS.SET_OPTION,
-        { enabled: statusStore.showTaskbarLyric },
-        true,
-      );
-      // 显示桌面歌词
-      window.electron.ipcRenderer.send("desktop-lyric:toggle", statusStore.showDesktopLyric);
       // 检查更新
       if (settingStore.checkUpdateOnStart) window.electron.ipcRenderer.send("check-update", false);
-      // 如果启用macOS歌词，发送初始数据
-      if (isMac && settingStore.macos.statusBarLyric.enabled) {
-        window.electron.ipcRenderer.send(TASKBAR_IPC_CHANNELS.REQUEST_DATA);
-      }
-      // 确保主窗口在最后获得焦点
+      // 三种歌词窗口由主进程根据 windowStates 自行恢复，无需此处主动触发
       if (statusStore.showDesktopLyric) {
         setTimeout(() => {
           window.electron.ipcRenderer.send("win-show-main");

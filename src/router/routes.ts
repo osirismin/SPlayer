@@ -374,19 +374,8 @@ const routes: Array<RouteRecordRaw> = [
     component: AppLayout,
     children: [...appRoutes],
   },
-  // 桌面歌词
-  {
-    path: "/desktop-lyric",
-    name: "desktop-lyric",
-    meta: { needApp: true },
-    component: () => import("@/views/DesktopLyric/index.vue"),
-  },
-  // 任务栏歌词
-  {
-    path: "/taskbar-lyric",
-    name: "taskbar-lyric",
-    component: () => import("@/views/TaskbarLyric/index.vue"),
-  },
+  // 桌面歌词 / 灵动岛 / 任务栏歌词 已迁移为独立 vite entry（windows/<mode>/index.html），
+  // 不再走主窗口的 vue-router，因此这里不需要任何路由
   // 404
   {
     path: "/:pathMatch(.*)*",

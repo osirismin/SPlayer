@@ -62,11 +62,11 @@ app.config.errorHandler = (err, _instance, info) => {
 // app
 app.mount("#app");
 
-// 初始化 ipc
-if (!location.hash.includes("desktop-lyric")) initIpc();
+// 初始化 ipc（歌词窗口都是独立 vite entry，不会进入此入口，不再需要 hash 判断）
+initIpc();
 
 // 根据设置判断是否要注册协议
-if (isElectron && !location.hash.includes("desktop-lyric")) {
+if (isElectron) {
   const settings = useSettingStore();
   sendRegisterProtocol("orpheus", settings.registryProtocol.orpheus);
 }

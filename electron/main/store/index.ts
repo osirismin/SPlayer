@@ -1,50 +1,40 @@
-import { DEFAULT_TASKBAR_CONFIG, type TaskbarConfig } from "@shared";
 import { app, screen } from "electron";
 import Store from "electron-store";
 import { join } from "path";
-import defaultLyricConfig from "../../../src/assets/data/lyricConfig";
-import type { LyricConfig } from "../../../src/types/desktop-lyric";
+import {
+  DEFAULT_DESKTOP_LYRIC,
+  DEFAULT_DYNAMIC_ISLAND,
+  DEFAULT_TASKBAR_LYRIC,
+  DEFAULT_LYRIC_WINDOW_STATES,
+  type DesktopLyricSettings,
+  type DynamicIslandSettings,
+  type LyricWindowStates,
+  type TaskbarLyricSettings,
+} from "@shared/lyric-window";
 import { storeLog } from "../logger";
 import { defaultAMLLDbServer } from "../utils/config";
 
 storeLog.info("🌱 Store init");
 
 export interface StoreType {
-  /** 窗口 */
+  /** 主窗口几何 */
   window: {
-    /** 窗口宽度 */
     width: number;
-    /** 窗口高度 */
     height: number;
-    /** 窗口位置 x */
     x?: number;
-    /** 窗口位置 y */
     y?: number;
-    /** 是否最大化 */
     maximized?: boolean;
-    /** 是否启用无边框窗口 */
     useBorderless?: boolean;
-    /** 缩放系数 (0.5 - 2.0) */
     zoomFactor?: number;
   };
-  /** 歌词 */
-  lyric: {
-    /** 窗口位置 x */
-    x?: number;
-    /** 窗口位置 y */
-    y?: number;
-    /** 窗口宽度 */
-    width?: number;
-    /** 窗口高度 */
-    height?: number;
-    /** 配置 */
-    config?: LyricConfig;
-  };
-  /** 任务栏歌词 */
-  taskbar: TaskbarConfig & {
-    floatingX?: number;
-    floatingY?: number;
-  };
+  /** 桌面歌词配置 */
+  desktopLyric: DesktopLyricSettings;
+  /** 灵动岛歌词配置 */
+  dynamicIsland: DynamicIslandSettings;
+  /** 任务栏歌词配置（仅 Windows 实际生效） */
+  taskbarLyric: TaskbarLyricSettings;
+  /** 三种歌词窗口的运行时几何状态 */
+  windowStates: LyricWindowStates;
   /** 代理 */
   proxy: string;
   /** amll-db-server */
@@ -55,20 +45,16 @@ export interface StoreType {
   cacheLimit: number;
   /** websocket */
   websocket: {
-    /** 是否启用 */
     enabled: boolean;
-    /** 端口 */
     port: number;
   };
   /** 下载线程数 */
   downloadThreadCount?: number;
-  /** 启用HTTP2下载 */
+  /** 启用 HTTP/2 下载 */
   enableDownloadHttp2?: boolean;
   /** macOS 专属设置 */
   macos: {
-    /** 状态栏歌词 */
     statusBarLyric: {
-      /** 是否启用 */
       enabled: boolean;
     };
   };
@@ -76,13 +62,14 @@ export interface StoreType {
   updateChannel?: "stable" | "nightly";
 }
 
-/**
- * 使用 Store
- * @returns Store<StoreType>
- */
+/** 使用 Store */
 export const useStore = () => {
-  // 获取主屏幕
   const screenData = screen.getPrimaryDisplay();
+  const desktopLyricDefaultState = {
+    ...DEFAULT_LYRIC_WINDOW_STATES.desktopLyric,
+    x: Math.round(screenData.workAreaSize.width / 2 - 400),
+    y: Math.round(screenData.workAreaSize.height - 240),
+  };
   return new Store<StoreType>({
     defaults: {
       window: {
@@ -90,34 +77,28 @@ export const useStore = () => {
         height: 800,
         useBorderless: true,
       },
-      lyric: {
-        x: screenData.workAreaSize.width / 2 - 400,
-        y: screenData.workAreaSize.height - 90,
-        width: 800,
-        height: 136,
-        config: defaultLyricConfig,
-      },
-      taskbar: {
-        ...DEFAULT_TASKBAR_CONFIG,
-        floatingX: screenData.workArea.x + screenData.workArea.width / 2 - 150,
-        floatingY: screenData.workArea.y + screenData.workArea.height - 120,
-      },
-      macos: {
-        statusBarLyric: {
-          enabled: false,
-        },
+      desktopLyric: { ...DEFAULT_DESKTOP_LYRIC },
+      dynamicIsland: { ...DEFAULT_DYNAMIC_ISLAND },
+      taskbarLyric: { ...DEFAULT_TASKBAR_LYRIC },
+      windowStates: {
+        ...DEFAULT_LYRIC_WINDOW_STATES,
+        desktopLyric: desktopLyricDefaultState,
       },
       proxy: "",
       amllDbServer: defaultAMLLDbServer,
       cachePath: join(app.getPath("userData"), "DataCache"),
-      cacheLimit: 10, // 默认 10GB
-      // websocket
+      cacheLimit: 10,
       websocket: {
         enabled: false,
         port: 25885,
       },
       downloadThreadCount: 8,
       enableDownloadHttp2: true,
+      macos: {
+        statusBarLyric: {
+          enabled: false,
+        },
+      },
       updateChannel: "stable",
     },
   });

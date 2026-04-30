@@ -49,6 +49,7 @@ const createWord = (word: string, startTime: number, endTime: number = startTime
   word,
   startTime,
   endTime,
+  romanWord: "",
 });
 
 /**
@@ -339,9 +340,7 @@ export const alignLyricLines = (
     return true;
   };
   // 按开始时间分组
-  const sorted = skipSort
-    ? lyrics
-    : [...lyrics].sort((a, b) => toStartTime(a) - toStartTime(b));
+  const sorted = skipSort ? lyrics : [...lyrics].sort((a, b) => toStartTime(a) - toStartTime(b));
   const groups: LyricLine[][] = [];
   for (const line of sorted) {
     const last = groups[groups.length - 1]?.[0];
@@ -461,7 +460,7 @@ export const parseQRCLyric = (qrcContent: string, trans?: string, roma?: string)
   const qrcLines = parseQRCContent(qrcContent);
   let result: LyricLine[] = qrcLines.map((qrcLine) => {
     return {
-      words: qrcLine.words,
+      words: qrcLine.words.map((w) => ({ ...w, romanWord: "" })),
       startTime: qrcLine.startTime,
       endTime: qrcLine.endTime,
       translatedLyric: "",
@@ -495,6 +494,7 @@ export const parseQRCLyric = (qrcContent: string, trans?: string, roma?: string)
               startTime: line.startTime,
               endTime: line.endTime,
               word: line.words.map((w) => w.word).join(""),
+              romanWord: "",
             },
           ],
           startTime: line.startTime,

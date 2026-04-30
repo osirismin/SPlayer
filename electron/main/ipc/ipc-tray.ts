@@ -2,7 +2,6 @@ import type { PlayModePayload } from "@shared";
 import { ipcMain } from "electron";
 import { getMainTray } from "../tray";
 import { appName, isMac } from "../utils/config";
-import lyricWindow from "../windows/lyric-window";
 import { useStore } from "../store";
 
 // 当前歌曲标题
@@ -20,12 +19,9 @@ export const getCurrentSongTitle = () => currentSongTitle;
 const initTrayIpc = (): void => {
   const tray = getMainTray();
 
-  // 音乐播放状态更改
+  // 音乐播放状态更改（歌词窗口由 NowPlayingService 自行同步）
   ipcMain.on("play-status-change", (_, playStatus: boolean) => {
-    const lyricWin = lyricWindow.getWin();
     tray?.setPlayState(playStatus ? "play" : "pause");
-    if (!lyricWin) return;
-    lyricWin.webContents.send("play-status-change", playStatus);
   });
 
   // 音乐名称更改
@@ -53,15 +49,8 @@ const initTrayIpc = (): void => {
     tray?.setLikeState(likeStatus);
   });
 
-  // 桌面歌词开关
-  ipcMain.on("desktop-lyric:toggle", (_, val: boolean) => {
-    tray?.setDesktopLyricShow(val);
-  });
-
-  // 锁定/解锁桌面歌词
-  ipcMain.on("desktop-lyric:toggle-lock", (_, { lock }: { lock: boolean }) => {
-    tray?.setDesktopLyricLock(lock);
-  });
+  // 桌面/灵动岛/任务栏歌词的开关与锁定状态由窗口生命周期回调直接同步到托盘
+  // （见 windows/*-window.ts 的 getMainTray()?.setXxxShow / setDesktopLyricLock 调用）
 };
 
 export default initTrayIpc;

@@ -127,9 +127,14 @@ export const useGeneralSettings = (): SettingConfig => {
         try {
           const result = await window.api.store.import();
           if (result && result.success) {
-            const data = result.data;
+            const data = result.data as
+              | {
+                  renderer?: Record<string, string>;
+                  electron?: unknown;
+                }
+              | undefined;
             let restoredCount = 0;
-            if (data.renderer) {
+            if (data?.renderer) {
               const storesToRestore = [
                 "setting-store",
                 "shortcut-store",
@@ -137,15 +142,16 @@ export const useGeneralSettings = (): SettingConfig => {
                 // "music-store",
               ];
 
+              const renderer = data.renderer;
               storesToRestore.forEach((key) => {
-                if (data.renderer[key]) {
-                  localStorage.setItem(key, data.renderer[key]);
+                if (renderer[key]) {
+                  localStorage.setItem(key, renderer[key]);
                   restoredCount++;
                 }
               });
             }
 
-            if (restoredCount > 0 || data.electron) {
+            if (restoredCount > 0 || data?.electron) {
               window.$message.success("设置导入成功，即将重启");
               setTimeout(() => {
                 window.location.reload();

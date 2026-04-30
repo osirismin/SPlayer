@@ -337,6 +337,7 @@ export type SettingType =
   | "appearance"
   | "play"
   | "lyrics"
+  | "externalLyric"
   | "keyboard"
   | "local"
   | "network"

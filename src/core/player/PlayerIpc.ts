@@ -1,14 +1,12 @@
-import { toRaw } from "vue";
-import { useMusicStore, useSettingStore } from "@/stores";
-import type { SongLyric } from "@/types/lyric";
-import { useLyricManager } from "./LyricManager";
+import { useSettingStore } from "@/stores";
 import {
-  TASKBAR_IPC_CHANNELS,
-  type SyncStatePayload,
-  type SyncTickPayload,
-} from "@/types/shared";
+  NOW_PLAYING_IPC,
+  type NowPlayingTrack,
+  type NowPlayingUpdatePayload,
+} from "@/types/shared/now-playing";
+import type { LyricLine, LyricData } from "@/types/shared/lyrics";
 import type { PlayModePayload, RepeatModeType, ShuffleModeType } from "@/types/shared/play-mode";
-import { isElectron, isMac } from "@/utils/env";
+import { isElectron } from "@/utils/env";
 import { getPlaySongData } from "@/utils/format";
 import type { DiscordConfigPayload, MetadataParam, PlaybackStatus, RepeatMode } from "@emi";
 import { throttle } from "lodash-es";
@@ -32,7 +30,7 @@ const sendIpc = (channel: string, ...args: any[]) => {
 export const sendPlayStatus = (isPlaying: boolean) => sendIpc("play-status-change", isPlaying);
 
 /**
- * 发送歌曲信息
+ * 发送歌曲信息（用于托盘 / SMTC 等通用集成；歌词窗口走 NowPlaying 总线）
  * @param title 歌曲标题
  * @param name 歌曲名称
  * @param artist 歌手
@@ -40,13 +38,8 @@ export const sendPlayStatus = (isPlaying: boolean) => sendIpc("play-status-chang
  */
 export const sendSongChange = (title: string, name: string, artist: string, album: string) => {
   if (!isElectron) return;
-  // 获取歌曲时长
   const duration = getPlaySongData()?.duration ?? 0;
   sendIpc("play-song-change", { title, name, artist, album, duration });
-  sendIpc("desktop-lyric:update-data", {
-    playName: name,
-    artistName: artist,
-  });
 };
 
 /**
@@ -74,165 +67,76 @@ export const sendSocketProgress: (currentTime: number, duration: number) => void
 );
 
 /**
- * 发送歌词
- * @param data 歌词数据
- */
-export const sendLyric: (data: unknown) => void = throttle((data: unknown) => {
-  if (!isElectron) return;
-  // 添加发送时间戳，用于桌面歌词端补偿 IPC 传输延迟
-  const payload =
-    typeof data === "object" && data !== null
-      ? { ...data, sendTimestamp: performance.now() }
-      : data;
-  sendIpc("play-lyric-change", payload);
-}, 500);
-
-/**
  * 发送喜欢状态
  * @param isLiked 是否喜欢
  */
 export const sendLikeStatus = (isLiked: boolean) => sendIpc("like-status-change", isLiked);
 
-/**
- * 发送桌面歌词开关
- * @param show 是否显示
- */
-export const toggleDesktopLyric = (show: boolean) => sendIpc("desktop-lyric:toggle", show);
+// =====================================================================
+// NowPlaying 总线 API
+// 三种歌词窗口（桌面 / 灵动岛 / 任务栏）和 mac 状态栏歌词都通过这一条总线
+// =====================================================================
+
+/** 推送当前播放状态（曲目 + 已解析歌词 + 来源）到主进程总线 */
+export const nowPlayingUpdate = (payload: NowPlayingUpdatePayload) => {
+  sendIpc(NOW_PLAYING_IPC.UPDATE, payload);
+};
+
+/** 推送高频播放位置（毫秒） */
+export const nowPlayingPosition: (positionMs: number, playing: boolean) => void = throttle(
+  (positionMs: number, playing: boolean) => {
+    sendIpc(NOW_PLAYING_IPC.POSITION, { position: positionMs, playing });
+  },
+  200,
+);
+
+/** 推送播放状态变化（暂停/恢复立即同步一次） */
+export const nowPlayingPlayState = (playing: boolean) => {
+  sendIpc(NOW_PLAYING_IPC.PLAY_STATE, playing);
+};
 
 /**
- * 设置任务栏歌词显示
- * @param show 是否显示
+ * 把 SongType 转成 NowPlayingTrack（IPC 边界格式）
+ * 字段以原项目 SongType 为准，artists / album 保持原始的字符串/数组多态
  */
-export const setTaskbarLyricShow = (show: boolean) =>
-  sendIpc(TASKBAR_IPC_CHANNELS.SET_OPTION, { enabled: show }, true);
+export const buildNowPlayingTrack = (
+  song: {
+    id: number | string;
+    name: string;
+    artists: unknown;
+    album?: unknown;
+    duration: number;
+    cover?: string;
+    type?: "song" | "radio" | "streaming";
+    path?: string;
+    alia?: string;
+  } | null,
+): NowPlayingTrack | null => {
+  if (!song) return null;
+  return {
+    id: song.id,
+    name: song.name,
+    artists: song.artists as NowPlayingTrack["artists"],
+    album: song.album as NowPlayingTrack["album"],
+    duration: song.duration,
+    cover: song.cover,
+    type: song.type,
+    path: song.path,
+    alia: song.alia,
+  };
+};
 
-/**
- * 向歌词任务栏等外部窗口广播通用的播放状态事件
- * 类型包括曲目切换、歌词加载完成、播放/暂停状态变更等
- * @param payload 包含具体事件类型和数据的同步负载
- */
-export const broadcastTaskbarState = (payload: SyncStatePayload) =>
-  sendIpc(TASKBAR_IPC_CHANNELS.SYNC_STATE, payload);
-
-/**
- * 向外部窗口高频广播音频进度 Tick 时间戳
- * @param payload 包含当前时间、总时长和歌词时间偏移量的元组
- */
-export const broadcastTaskbarTick = (payload: SyncTickPayload) =>
-  sendIpc(TASKBAR_IPC_CHANNELS.SYNC_TICK, payload);
-
-export interface TaskbarMetadataPayload {
-  title: string;
-  artist: string;
-  cover: string;
-}
-
-/**
- * 发布当前歌曲的基本元数据信息到任务栏扩展工具
- * 将自动组装为 `track-change` 事件进行同步分发
- * @param payload 含有标题、歌手和封面 URL 的歌曲基础数据
- */
-export const sendTaskbarMetadata = (payload: TaskbarMetadataPayload) => {
-  broadcastTaskbarState({
-    type: "track-change",
-    data: {
-      title: payload.title,
-      artist: payload.artist,
-      cover: payload.cover,
-    },
+/** 推送歌词与曲目（在 LyricManager 完成解析后调用） */
+export const nowPlayingPushTrackAndLyric = (
+  song: Parameters<typeof buildNowPlayingTrack>[0],
+  lyric: LyricLine[],
+  source: LyricData,
+) => {
+  nowPlayingUpdate({
+    track: buildNowPlayingTrack(song),
+    lyric,
+    source,
   });
-};
-
-/**
- * 将获取或解析完成的歌词数组内容全量推送到任务栏工具
- * 如果存在逐字歌词 (yrcData) 则优先使用逐字渲染，否则降级到普通行歌词 (lrcData)
- * @param lyrics 原始歌词对象模型（含 yrcData 和 lrcData 等）
- */
-export const sendTaskbarLyrics = async (lyrics: SongLyric) => {
-  if (!isElectron) return;
-
-  const yrcData = lyrics.yrcData ?? [];
-  const lrcData = lyrics.lrcData ?? [];
-  const hasYrc = yrcData.length > 0;
-
-  let taskbarLyrics = hasYrc ? yrcData : lrcData;
-
-  // 如果是 TTML 逐字歌词，尝试注入 BG (仅用于任务栏显示)
-  if (hasYrc) {
-    const musicStore = useMusicStore();
-    const songId = musicStore.playSong?.id;
-    if (songId) {
-      const lyricManager = useLyricManager();
-      // 获取缓存的原始 TTML
-      const rawTtml = await lyricManager.getRawTtml(songId);
-      if (rawTtml) {
-        // 使用专门的任务栏处理逻辑注入 BG
-        // 注意：这里返回的是一个新的数组，不会污染原始 lyrics 对象
-        taskbarLyrics = lyricManager.processTtmlForTaskbar(taskbarLyrics, rawTtml);
-      }
-    }
-  }
-
-  broadcastTaskbarState({
-    type: "lyrics-loaded",
-    data: {
-      lines: toRaw(taskbarLyrics),
-      type: hasYrc ? "word" : "line",
-    },
-  });
-};
-
-export interface TaskbarStatePayload {
-  isPlaying: boolean;
-}
-
-/**
- * 通知任务栏工具当前的主播放状态（暂停 或 播放中）
- * 用于同步托盘上的全局操作按钮 UI 状态
- * @param payload 状态信息包装
- */
-export const sendTaskbarState = (payload: TaskbarStatePayload) => {
-  broadcastTaskbarState({
-    type: "playback-state",
-    data: payload,
-  });
-};
-
-export interface TaskbarProgressPayload {
-  currentTime: number;
-  duration: number;
-  offset: number;
-}
-
-/**
- * 发送高频的逐帧进度时间到任务栏（使用底层数组封装 Payload 以提升 IPC 效率）
- * 给任务栏实现平滑歌词滚动和进度条绘制使用
- * @param payload 包括当前秒、总长以及人工设置的偏移量
- */
-export const sendTaskbarProgressData = (payload: TaskbarProgressPayload) => {
-  broadcastTaskbarTick([payload.currentTime, payload.duration, payload.offset]);
-};
-
-/**
- * 同步主应用主题（明亮模式 / 暗色模式 的主基准色值）
- * 到任务栏歌词应用，使其视觉和谐
- * @param color 提取到的发光色对象（含 light 与 dark 两个方向）
- */
-export const sendTaskbarThemeColor = (color: { light: string; dark: string } | null) => {
-  if (!isElectron) return;
-
-  broadcastTaskbarState({
-    type: "theme-color",
-    data: color,
-  });
-};
-
-/**
- * 发送高频进度数据给 macOS 的原生态 StatusBar (状态栏歌词)
- * @param payload 包括当前秒、总长以及时间偏移
- */
-export const sendMacStatusBarProgress = (payload: TaskbarProgressPayload) => {
-  if (isMac) sendIpc("mac-statusbar:update-progress", payload);
 };
 
 /**

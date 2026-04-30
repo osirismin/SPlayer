@@ -77,122 +77,64 @@
       </n-card>
     </div>
     <div class="set-list" v-if="isElectron">
-      <n-h3 prefix="bar">桌面歌词</n-h3>
-      <n-card class="set-item" :class="{ 'input-mode': isInputMode }">
-        <div class="label">
-          <div class="label-header">
-            <div class="info" style="display: flex; flex-direction: column">
-              <n-text class="name">桌面歌词字体</n-text>
-              <n-text class="tip" :depth="3"> 桌面歌词使用的字体 </n-text>
+      <n-h3 prefix="bar">歌词窗口字体</n-h3>
+      <template v-for="entry in lyricWindowFontConfigs" :key="entry.mode">
+        <n-card
+          v-if="entry.show"
+          class="set-item"
+          :class="{ 'input-mode': isInputMode }"
+        >
+          <div class="label">
+            <div class="label-header">
+              <div class="info" style="display: flex; flex-direction: column">
+                <n-text class="name">{{ entry.name }}</n-text>
+                <n-text class="tip" :depth="3">{{ entry.tip }}</n-text>
+              </div>
+              <Transition name="fade" mode="out-in">
+                <n-button
+                  :disabled="lyricWindowFonts[entry.mode] === 'system-ui'"
+                  type="primary"
+                  strong
+                  secondary
+                  @click="saveLyricWindowFont(entry.mode, 'system-ui')"
+                >
+                  恢复默认
+                </n-button>
+              </Transition>
             </div>
-            <Transition name="fade" mode="out-in">
-              <n-button
-                :disabled="desktopLyricConfig.fontFamily === 'system-ui'"
-                type="primary"
-                strong
-                secondary
-                @click="
-                  () => {
-                    desktopLyricConfig.fontFamily = 'system-ui';
-                    saveDesktopLyricConfig();
-                  }
-                "
-              >
-                恢复默认
-              </n-button>
-            </Transition>
           </div>
-        </div>
-        <n-flex align="center">
-          <s-input
-            v-if="settingStore.fontSettingStyle === 'custom'"
-            :value="desktopLyricConfig.fontFamily"
-            :update-value-on-input="false"
-            placeholder="输入字体名称"
-            class="set"
-            @update:value="
-              (val) => {
-                desktopLyricConfig.fontFamily = val;
-                saveDesktopLyricConfig();
-              }
-            "
-          />
-          <n-select
-            v-else-if="settingStore.fontSettingStyle === 'multi'"
-            :value="fontFamilyToArray(desktopLyricConfig.fontFamily)"
-            :options="getOptions('desktop')"
-            class="set"
-            filterable
-            multiple
-            tag
-            @update:value="
-              (val: string[]) => (desktopLyricConfig.fontFamily = fontArrayToFamily(val))
-            "
-          />
-          <n-select
-            v-else-if="settingStore.fontSettingStyle === 'single'"
-            :value="fontFamilyToDisplay(desktopLyricConfig.fontFamily)"
-            :options="getOptions('desktop')"
-            class="set"
-            filterable
-            @update:value="
-              (val) => {
-                desktopLyricConfig.fontFamily = fontDisplayToFamily(val);
-                saveDesktopLyricConfig();
-              }
-            "
-          />
-        </n-flex>
-      </n-card>
-      <n-card class="set-item" :class="{ 'input-mode': isInputMode }">
-        <div class="label">
-          <div class="label-header">
-            <div class="info" style="display: flex; flex-direction: column">
-              <n-text class="name">任务栏歌词字体</n-text>
-              <n-text class="tip" :depth="3"> 任务栏歌词使用的字体 </n-text>
-            </div>
-            <Transition name="fade" mode="out-in">
-              <n-button
-                :disabled="taskbarFontFamily === 'system-ui'"
-                type="primary"
-                strong
-                secondary
-                @click="saveTaskbarLyricFont('system-ui')"
-              >
-                恢复默认
-              </n-button>
-            </Transition>
-          </div>
-        </div>
-        <n-flex align="center">
-          <s-input
-            v-if="settingStore.fontSettingStyle === 'custom'"
-            :value="taskbarFontFamily"
-            :update-value-on-input="false"
-            placeholder="输入字体名称"
-            class="set"
-            @update:value="(val) => saveTaskbarLyricFont(val)"
-          />
-          <n-select
-            v-else-if="settingStore.fontSettingStyle === 'multi'"
-            :value="fontFamilyToArray(taskbarFontFamily)"
-            :options="getOptions('desktop')"
-            class="set"
-            filterable
-            multiple
-            tag
-            @update:value="(val: string[]) => saveTaskbarLyricFont(fontArrayToFamily(val))"
-          />
-          <n-select
-            v-else-if="settingStore.fontSettingStyle === 'single'"
-            :value="fontFamilyToDisplay(taskbarFontFamily)"
-            :options="getOptions('desktop')"
-            class="set"
-            filterable
-            @update:value="(val) => saveTaskbarLyricFont(fontDisplayToFamily(val))"
-          />
-        </n-flex>
-      </n-card>
+          <n-flex align="center">
+            <s-input
+              v-if="settingStore.fontSettingStyle === 'custom'"
+              :value="lyricWindowFonts[entry.mode]"
+              :update-value-on-input="false"
+              placeholder="输入字体名称"
+              class="set"
+              @update:value="(val) => saveLyricWindowFont(entry.mode, val)"
+            />
+            <n-select
+              v-else-if="settingStore.fontSettingStyle === 'multi'"
+              :value="fontFamilyToArray(lyricWindowFonts[entry.mode])"
+              :options="getOptions(entry.mode)"
+              class="set"
+              filterable
+              multiple
+              tag
+              @update:value="
+                (val: string[]) => saveLyricWindowFont(entry.mode, fontArrayToFamily(val))
+              "
+            />
+            <n-select
+              v-else-if="settingStore.fontSettingStyle === 'single'"
+              :value="fontFamilyToDisplay(lyricWindowFonts[entry.mode])"
+              :options="getOptions(entry.mode)"
+              class="set"
+              filterable
+              @update:value="(val) => saveLyricWindowFont(entry.mode, fontDisplayToFamily(val))"
+            />
+          </n-flex>
+        </n-card>
+      </template>
     </div>
     <div class="set-list">
       <n-h3 prefix="bar">歌词字体</n-h3>
@@ -257,22 +199,36 @@
 
 <script setup lang="ts">
 import { useSettingStore } from "@/stores";
-import { TASKBAR_IPC_CHANNELS } from "@/types/shared";
-import { isElectron } from "@/utils/env";
+import { isElectron, isWin } from "@/utils/env";
 import type { SelectOption } from "naive-ui";
 import { lyricFontConfigs } from "@/utils/lyric/lyricFontConfig";
-import { LyricConfig } from "@/types/desktop-lyric";
-import defaultDesktopLyricConfig from "@/assets/data/lyricConfig";
-import { cloneDeep, isEqual } from "lodash-es";
+
+type LyricWindowMode = "desktopLyric" | "dynamicIsland" | "taskbarLyric";
+
+interface LyricWindowFontEntry {
+  mode: LyricWindowMode;
+  name: string;
+  tip: string;
+  show: boolean;
+}
 
 const settingStore = useSettingStore();
 
-// 任务栏歌词字体
-const taskbarFontFamily = ref("system-ui");
 // 系统字体选项
 const systemFonts = ref<SelectOption[]>([]);
-// 桌面歌词配置
-const desktopLyricConfig = reactive<LyricConfig>({ ...defaultDesktopLyricConfig });
+
+/** 三种独立歌词窗口的字体；通过 window.api.lyric.getConfig/setConfig 持久化 */
+const lyricWindowFontConfigs: LyricWindowFontEntry[] = [
+  { mode: "desktopLyric", name: "桌面歌词字体", tip: "桌面歌词窗口使用的字体", show: true },
+  { mode: "dynamicIsland", name: "灵动岛歌词字体", tip: "灵动岛歌词窗口使用的字体", show: true },
+  { mode: "taskbarLyric", name: "任务栏歌词字体", tip: "任务栏歌词使用的字体", show: isWin },
+];
+
+const lyricWindowFonts = reactive<Record<LyricWindowMode, string>>({
+  desktopLyric: "system-ui",
+  dynamicIsland: "system-ui",
+  taskbarLyric: "system-ui",
+});
 
 // 是否为输入模式
 const isInputMode = computed(() => settingStore.fontSettingStyle !== "single" || !isElectron);
@@ -280,11 +236,12 @@ const isInputMode = computed(() => settingStore.fontSettingStyle !== "single" ||
 // 获取下拉选项
 const getOptions = (key: string) => {
   const isGlobal = key === "globalFont";
-  const isDesktop = key === "desktop";
+  const isLyricWindow =
+    key === "desktopLyric" || key === "dynamicIsland" || key === "taskbarLyric";
   let defaultLabel = "跟随全局";
   let defaultValue = "follow";
 
-  if (isGlobal || isDesktop) {
+  if (isGlobal || isLyricWindow) {
     defaultLabel = "系统默认";
     defaultValue = isGlobal ? "default" : "system-ui";
   }
@@ -392,60 +349,34 @@ const fontArrayToFamily = (fontArray: string[]): string => {
   return fontArray.map(fontDisplayToFamily).join(", ");
 };
 
-// 获取桌面歌词配置
-const getTaskbarLyricConfig = async () => {
+/** 加载三种歌词窗口的字体配置 */
+const loadLyricWindowFonts = async (): Promise<void> => {
   if (!isElectron) return;
-  const config = await window.electron.ipcRenderer.invoke(TASKBAR_IPC_CHANNELS.GET_OPTION);
-  if (config?.fontFamily) taskbarFontFamily.value = config.fontFamily;
+  await Promise.all(
+    lyricWindowFontConfigs.map(async ({ mode }) => {
+      try {
+        const cfg = (await window.api.lyric.getConfig(mode)) as { fontFamily?: string } | null;
+        if (cfg && typeof cfg.fontFamily === "string") {
+          lyricWindowFonts[mode] = cfg.fontFamily;
+        }
+      } catch (err) {
+        console.error(`[FontManager] load ${mode} font failed`, err);
+      }
+    }),
+  );
 };
 
-const saveTaskbarLyricFont = (fontFamily: string) => {
+const saveLyricWindowFont = (mode: LyricWindowMode, value: string): void => {
+  lyricWindowFonts[mode] = value;
   if (!isElectron) return;
-  taskbarFontFamily.value = fontFamily;
-  window.electron.ipcRenderer.send(TASKBAR_IPC_CHANNELS.SET_OPTION, { fontFamily }, true);
-};
-
-const getDesktopLyricConfig = async () => {
-  if (!isElectron) return;
-  const config = await window.electron.ipcRenderer.invoke("desktop-lyric:get-option");
-  if (config) Object.assign(desktopLyricConfig, config);
-};
-
-const onLyricConfigUpdate = (_: any, config: LyricConfig) => {
-  if (config && !isEqual(desktopLyricConfig, config)) {
-    Object.assign(desktopLyricConfig, config);
-  }
-};
-
-// 保存桌面歌词配置
-const saveDesktopLyricConfig = (val?: string) => {
-  try {
-    if (!isElectron) return;
-    if (val) desktopLyricConfig.fontFamily = val;
-    window.electron.ipcRenderer.send(
-      "desktop-lyric:set-option",
-      cloneDeep(desktopLyricConfig),
-      true,
-    );
-    window.$message.success("桌面歌词字体已保存");
-  } catch (error) {
-    console.error("Failed to save options:", error);
-    window.$message.error("桌面歌词配置保存失败");
-    getDesktopLyricConfig();
-  }
+  window.api.lyric.setConfig(mode, { fontFamily: value }).catch((err) => {
+    console.error(`[FontManager] save ${mode} font failed`, err);
+  });
 };
 
 onMounted(() => {
   getAllSystemFonts();
-  getDesktopLyricConfig();
-  getTaskbarLyricConfig();
-  window.electron.ipcRenderer.on("desktop-lyric:update-option", onLyricConfigUpdate);
-});
-
-onUnmounted(() => {
-  if (isElectron) {
-    window.electron.ipcRenderer.removeListener("desktop-lyric:update-option", onLyricConfigUpdate);
-  }
+  loadLyricWindowFonts();
 });
 </script>
 

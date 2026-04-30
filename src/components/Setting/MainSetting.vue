@@ -99,6 +99,12 @@
             :groups="lyricConfig.groups"
             :highlight-key="highlightKey"
           />
+          <!-- 外部歌词 -->
+          <UniversalSetting
+            v-else-if="activeKey === 'externalLyric'"
+            :groups="externalLyricConfig.groups"
+            :highlight-key="highlightKey"
+          />
           <!-- 快捷键 -->
           <UniversalSetting
             v-else-if="activeKey === 'keyboard'"
@@ -141,6 +147,7 @@ import { usePlaySettings } from "./config/play";
 import { useGeneralSettings } from "./config/general";
 import { useAppearanceSettings } from "./config/appearance";
 import { useLyricSettings } from "./config/lyric";
+import { useExternalLyricSettings } from "./config/external-lyric";
 import { useKeyboardSettings } from "./config/keyboard";
 import { useLocalSettings } from "./config/local";
 import { useNetworkSettings } from "./config/network";
@@ -151,6 +158,7 @@ const playConfig = usePlaySettings();
 const generalConfig = useGeneralSettings();
 const appearanceConfig = useAppearanceSettings();
 const lyricConfig = useLyricSettings();
+const externalLyricConfig = useExternalLyricSettings();
 const keyboardConfig = useKeyboardSettings();
 const localConfig = useLocalSettings();
 const networkConfig = useNetworkSettings();
@@ -161,6 +169,7 @@ const configs: Record<string, any> = {
   general: generalConfig,
   appearance: appearanceConfig,
   lyrics: lyricConfig,
+  externalLyric: externalLyricConfig,
   keyboard: keyboardConfig,
   local: localConfig,
   network: networkConfig,
@@ -173,6 +182,7 @@ const allSettingGroups = computed(() => {
     { key: "appearance", groups: appearanceConfig.groups },
     { key: "play", groups: playConfig.groups },
     { key: "lyrics", groups: lyricConfig.groups },
+    { key: "externalLyric", groups: externalLyricConfig.groups },
     { key: "keyboard", groups: keyboardConfig.groups },
     { key: "local", groups: localConfig.groups },
     { key: "network", groups: networkConfig.groups },
@@ -317,6 +327,12 @@ const menuOptions: MenuOption[] = [
   {
     key: "lyrics",
     label: "歌词设置",
+    icon: renderIcon("Lyrics"),
+  },
+  {
+    key: "externalLyric",
+    label: "外部歌词",
+    show: isElectron,
     icon: renderIcon("Lyrics"),
   },
   {
