@@ -144,11 +144,11 @@
       "electron-winstaller",
       "esbuild",
       "sharp",
-      "vue-demi",
-      "wasm-pack"
+      "vue-demi"
     ],
     "ignoredBuiltDependencies": [
-      "register-scheme"
+      "register-scheme",
+      "wasm-pack"
     ]
   }
 }

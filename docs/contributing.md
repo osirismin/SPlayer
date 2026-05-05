@@ -247,6 +247,5 @@ git commit --amend -m "新的提交信息"
 
 1. 查阅项目 [Issues](https://github.com/imsyy/SPlayer/issues)
 2. 提交新 Issue 描述您的问题
-3. 加入项目讨论群组
 
 感谢您的贡献！🎉

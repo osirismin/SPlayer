@@ -14,7 +14,7 @@ jobs:
     outputs:
       should_run: ${{ steps.check.outputs.should_run }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           ref: dev
           fetch-depth: 0
@@ -42,18 +42,56 @@ jobs:
   sync-and-build:
     needs: check-changes
     if: needs.check-changes.outputs.should_run == 'true'
-    name: Build on ${{ matrix.os }}
-    runs-on: ${{ matrix.os }}
+    name: Build on ${{ matrix.name }}
+    runs-on: ${{ matrix.runner }}
     strategy:
+      # 矩阵策略
+      # 即使一个矩阵任务失败，其他任务也会继续运行
       fail-fast: false
       matrix:
-        os: [macos-latest, windows-latest, ubuntu-latest]
+        include:
+          - name: Windows x64
+            runner: windows-latest
+            target: windows-x64
+          - name: Windows arm64
+            runner: windows-11-arm
+            target: windows-arm64
+          - name: macOS x64
+            runner: macos-15-intel
+            target: macos-x64
+          - name: macOS arm64
+            runner: macos-latest
+            target: macos-arm64
+          - name: Linux x64
+            runner: ubuntu-latest
+            target: linux-x64
+          - name: Linux arm64
+            runner: ubuntu-24.04-arm
+            target: linux-arm64
     steps:
-      - uses: actions/checkout@v4
+      # 检出 Git 仓库
+      - name: Check out git repository
+        uses: actions/checkout@v6
         with:
           ref: dev
           fetch-depth: 0
+      # 设置 pnpm
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v5
+      # 安装 Node.js
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: 22.x
+      # 设置 Rust
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: stable
+      - name: Rust Cache
+        uses: Swatinem/rust-cache@v2
 
+      # 清理旧的构建产物
       - name: Clean workspace on Windows
         if: runner.os == 'Windows'
         run: |
@@ -80,7 +118,7 @@ jobs:
 
       # 执行分支同步
       - name: Sync dev-nightly branch
-        if: matrix.os == 'windows-latest'
+        if: matrix.target == 'windows-x64'
         shell: bash
         run: |
           git config --global user.name "github-actions[bot]"
@@ -89,6 +127,23 @@ jobs:
           git checkout -b dev-nightly
           # 强制推送到远程
           git push -f origin dev-nightly
+
+      # 更新 Ubuntu 软件源并安装依赖
+      - name: Update and Install Ubuntu Dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y rpm libarchive-tools libopenjp2-tools
+
+      # macOS 上安装 LLVM 以支持 Wasm 编译
+      - name: Install LLVM on macOS
+        if: runner.os == 'macOS'
+        run: brew install llvm
+      - name: Set Environment Variables on macOS
+        if: runner.os == 'macOS'
+        run: |
+          echo "CC=$(brew --prefix llvm)/bin/clang" >> $GITHUB_ENV
+          echo "AR=$(brew --prefix llvm)/bin/llvm-ar" >> $GITHUB_ENV
 
       # 复制环境变量文件
       - name: Copy .env file on Windows
@@ -107,43 +162,12 @@ jobs:
           else
             echo ".env file already exists. Skipping the copy step."
           fi
-      # 设置 pnpm
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v3
-      - name: Setup Node.js
-        uses: actions/setup-node@v6
-        with:
-          node-version: 22.x
 
-      - name: Setup Rust toolchain
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          toolchain: stable
-
-      - name: Rust Cache
-        uses: Swatinem/rust-cache@v2
-
-      # macOS特定配置
-      - name: Install LLVM on macOS
-        if: runner.os == 'macOS'
-        run: brew install llvm
-      - name: Set Environment Variables on macOS
-        if: runner.os == 'macOS'
-        run: |
-          echo "CC=$(brew --prefix llvm)/bin/clang" >> $GITHUB_ENV
-          echo "AR=$(brew --prefix llvm)/bin/llvm-ar" >> $GITHUB_ENV
-
-      # Linux特定配置
-      - name: Install Linux Dependencies
-        if: runner.os == 'Linux'
-        run: |
-          sudo apt-get update
-          sudo apt-get install --no-install-recommends -y rpm libarchive-tools libopenjp2-tools
-          chmod +x ./node_modules/app-builder-bin/linux/x64/app-builder || true
-
+      # 安装项目依赖
       - name: Install dependencies
         run: pnpm install
 
+      # 生成 Nightly 版本号
       - name: Generate Nightly Version
         id: version
         shell: bash
@@ -165,20 +189,37 @@ jobs:
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: false
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          if [ "${{ runner.os }}" == "Windows" ]; then
-            pnpm build:win
-          elif [ "${{ runner.os }}" == "macOS" ]; then
-            pnpm build:mac
-          else
-            pnpm build:linux
-          fi
         shell: bash
+        run: |
+          case "${{ matrix.target }}" in
+            windows-x64)
+              pnpm build:win -- --x64
+              ;;
+            windows-arm64)
+              pnpm build:win -- --arm64
+              ;;
+            macos-x64)
+              pnpm build:mac -- --x64
+              ;;
+            macos-arm64)
+              pnpm build:mac -- --arm64
+              ;;
+            linux-x64)
+              pnpm build:linux -- --x64
+              ;;
+            linux-arm64)
+              pnpm build:linux -- --arm64
+              ;;
+            *)
+              echo "Unsupported target: ${{ matrix.target }}"
+              exit 1
+              ;;
+          esac
 
       - name: Upload Artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
-          name: update-assets-${{ matrix.os }}
+          name: update-assets-${{ matrix.name }}
           path: dist/*.*
 
   release:
@@ -188,7 +229,7 @@ jobs:
       contents: write
       discussions: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           ref: dev-nightly # 切换到 dev-nightly 分支
           fetch-depth: 0
@@ -207,7 +248,7 @@ jobs:
           git push -f origin $TAG_NAME
 
       - name: Download all artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           path: artifacts
 
