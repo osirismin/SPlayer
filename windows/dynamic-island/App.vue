@@ -63,7 +63,7 @@ const displayFallback = ref("SPlayer");
 const displayIndex = ref(-1);
 const displaySubText = ref("");
 
-const showSubLine = computed(() => config.doubleLine || displaySubText.value !== "");
+const showSubLine = computed(() => config.doubleLine && displaySubText.value !== "");
 const windowHeight = computed(
   () => mainRowHeight.value + (showSubLine.value ? subRowHeight.value : 0),
 );
@@ -81,8 +81,8 @@ let hasPainted = false;
 const lineText = (line: LyricLine): string => line.words.map((w) => w.word).join("");
 
 const computeSubText = (idx: number, line: LyricLine | null): string => {
-  if (config.showTranslation && line?.translatedLyric) return line.translatedLyric;
   if (!config.doubleLine || idx < 0) return "";
+  if (config.showTranslation && line?.translatedLyric) return line.translatedLyric;
   const next = lyric.value[idx + 1];
   return next ? lineText(next) : "";
 };

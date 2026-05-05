@@ -70,6 +70,8 @@ class LyricManager {
     // 重置歌词索引
     statusStore.lyricIndex = -1;
     statusStore.lyricLoading = false;
+    // 同步推送空快照，避免外部歌词窗口卡在上一首
+    this.pushNowPlaying({ lrcData: [], yrcData: [] });
   }
 
   /**
@@ -803,6 +805,9 @@ class LyricManager {
     // 标记当前歌词请求
     const req = ++this.lyricReqSeq;
     this.activeLyricReq = req;
+
+    // 立即推送一次新曲目 + 空歌词快照，避免外部歌词窗口在解析期间显示上一首
+    this.pushNowPlaying({ lrcData: [], yrcData: [] });
 
     // 清除不匹配的预加载
     if (this.prefetchedLyric && this.prefetchedLyric.id !== song.id) {

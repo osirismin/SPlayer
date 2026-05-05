@@ -39,7 +39,11 @@ export const update = (
   currentTrack = track;
   currentLyric = lyric;
   currentSource = source;
-  if (trackChanged) emitter.emit("track-change", { track });
+  if (trackChanged) {
+    // 切歌后还未收到第一次 position 推送前，旧歌的 lastPosition 不应被新歌的快照沿用
+    lastPosition = 0;
+    emitter.emit("track-change", { track });
+  }
   emitter.emit("lyric-change", snapshot());
 };
 

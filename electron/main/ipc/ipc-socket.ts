@@ -87,10 +87,9 @@ const initSocketIpc = (): void => {
       data: { status, timestamp: Date.now() },
     });
   });
-  // 歌词更新通过 NowPlayingService 总线广播（保留 lrcData/yrcData 字段以兼容外部 WebSocket 客户端）
+  // 歌词更新
   nowPlaying.onLyricChange((snap) => {
-    const lines = snap.lyric;
-    if (!lines || lines.length === 0) return;
+    const lines = snap.lyric ?? [];
     socketService.broadcast({
       type: "lyric-change",
       data: { lrcData: lines, yrcData: lines, timestamp: Date.now() },

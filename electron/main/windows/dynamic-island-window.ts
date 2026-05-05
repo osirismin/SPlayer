@@ -14,6 +14,9 @@ import {
 
 let dynamicIslandWindow: BrowserWindow | null = null;
 
+const isDynamicIslandAlive = (): boolean =>
+  !!dynamicIslandWindow && !dynamicIslandWindow.isDestroyed();
+
 const MIN_HEIGHT = 14;
 const MAX_HEIGHT = 200;
 const SNAP_THRESHOLD = 8;
@@ -36,8 +39,8 @@ const computeSnappedPos = (): { x: number; y: number } => {
   const config = store.get("dynamicIsland") as DynamicIslandSettings;
   const saved = store.get("windowStates").dynamicIsland;
   let display: Electron.Display;
-  if (dynamicIslandWindow && !dynamicIslandWindow.isDestroyed()) {
-    const bounds = dynamicIslandWindow.getBounds();
+  if (isDynamicIslandAlive()) {
+    const bounds = dynamicIslandWindow!.getBounds();
     display = screen.getDisplayNearestPoint({
       x: bounds.x + Math.round(bounds.width / 2),
       y: bounds.y + Math.round(bounds.height / 2),
@@ -72,9 +75,9 @@ let cursorPollTimer: NodeJS.Timeout | null = null;
 let lastCursorInside = false;
 
 const isCursorInsideBounds = (): boolean => {
-  if (!dynamicIslandWindow || dynamicIslandWindow.isDestroyed()) return false;
+  if (!isDynamicIslandAlive()) return false;
   const cursor = screen.getCursorScreenPoint();
-  const b = dynamicIslandWindow.getBounds();
+  const b = dynamicIslandWindow!.getBounds();
   return (
     cursor.x >= b.x && cursor.x < b.x + b.width && cursor.y >= b.y && cursor.y < b.y + b.height
   );
@@ -85,14 +88,14 @@ const startCursorPolling = (): void => {
   lastCursorInside = isCursorInsideBounds();
   dynamicIslandWindow?.webContents.send("dynamicIsland:cursorInside", lastCursorInside);
   cursorPollTimer = setInterval(() => {
-    if (!dynamicIslandWindow || dynamicIslandWindow.isDestroyed()) {
+    if (!isDynamicIslandAlive()) {
       stopCursorPolling();
       return;
     }
     const inside = isCursorInsideBounds();
     if (inside !== lastCursorInside) {
       lastCursorInside = inside;
-      dynamicIslandWindow.webContents.send("dynamicIsland:cursorInside", inside);
+      dynamicIslandWindow!.webContents.send("dynamicIsland:cursorInside", inside);
     }
   }, CURSOR_POLL_MS);
 };
@@ -275,9 +278,9 @@ export const getDynamicIslandMode = (): DynamicIslandWindowState["mode"] => {
 
 /** 创建灵动岛窗口 */
 export const createDynamicIslandWindow = (): BrowserWindow | null => {
-  if (dynamicIslandWindow && !dynamicIslandWindow.isDestroyed()) {
-    dynamicIslandWindow.show();
-    dynamicIslandWindow.focus();
+  if (isDynamicIslandAlive()) {
+    dynamicIslandWindow!.show();
+    dynamicIslandWindow!.focus();
     return dynamicIslandWindow;
   }
 
@@ -381,14 +384,14 @@ export const createDynamicIslandWindow = (): BrowserWindow | null => {
 
 /** 关闭灵动岛窗口 */
 export const closeDynamicIslandWindow = (): void => {
-  if (dynamicIslandWindow && !dynamicIslandWindow.isDestroyed()) {
-    dynamicIslandWindow.close();
+  if (isDynamicIslandAlive()) {
+    dynamicIslandWindow!.close();
   }
 };
 
 /** 切换灵动岛窗口；返回切换后是否打开 */
 export const toggleDynamicIslandWindow = (): boolean => {
-  if (dynamicIslandWindow && !dynamicIslandWindow.isDestroyed()) {
+  if (isDynamicIslandAlive()) {
     closeDynamicIslandWindow();
     return false;
   }
@@ -397,6 +400,5 @@ export const toggleDynamicIslandWindow = (): boolean => {
 
 /** 获取灵动岛窗口实例 */
 export const getDynamicIslandWindow = (): BrowserWindow | null => {
-  if (dynamicIslandWindow && !dynamicIslandWindow.isDestroyed()) return dynamicIslandWindow;
-  return null;
+  return isDynamicIslandAlive() ? dynamicIslandWindow : null;
 };

@@ -126,6 +126,10 @@ watch(
   () => nextTick(measure),
 );
 
+watch(useKaraoke, () => {
+  resetRenderCache();
+});
+
 onMounted(() => {
   resizeObserver = new ResizeObserver(measure);
   if (wrapperRef.value) resizeObserver.observe(wrapperRef.value);

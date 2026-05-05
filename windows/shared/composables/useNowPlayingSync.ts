@@ -1,3 +1,4 @@
+import type { Ref, ShallowRef } from "vue";
 import type { LyricLine } from "@shared/lyrics";
 import type { NowPlayingSnapshot, NowPlayingTrack } from "@shared/now-playing";
 import { clampLastLineEnd } from "../utils/lyric-sync";
@@ -89,17 +90,14 @@ export const useNowPlayingSync = (options: NowPlayingSyncOptions): NowPlayingSyn
   };
 
   const unsubscribers: Array<() => void> = [];
+  /** 实时事件已先行覆盖快照后，丢弃晚到的初始 snapshot 结果 */
+  let liveSnapshotApplied = false;
 
   onMounted(async () => {
-    try {
-      const snap = await window.api.nowPlaying.requestSnapshot();
-      applySnapshot(snap);
-    } catch (error) {
-      console.error(`[${logTag}] requestSnapshot failed`, error);
-    }
-
+    // 先订阅事件，避免在 await requestSnapshot 期间漏掉 lyric-change
     unsubscribers.push(
       window.api.nowPlaying.onLyricChange((snap) => {
+        liveSnapshotApplied = true;
         applySnapshot(snap);
         kickTick();
       }),
@@ -109,6 +107,13 @@ export const useNowPlayingSync = (options: NowPlayingSyncOptions): NowPlayingSyn
         kickTick();
       }),
     );
+
+    try {
+      const snap = await window.api.nowPlaying.requestSnapshot();
+      if (!liveSnapshotApplied) applySnapshot(snap);
+    } catch (error) {
+      console.error(`[${logTag}] requestSnapshot failed`, error);
+    }
 
     kickTick();
   });

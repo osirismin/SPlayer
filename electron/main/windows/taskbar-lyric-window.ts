@@ -169,10 +169,9 @@ const applyLayout = (layout: TaskbarLayout | null): void => {
 
   win.setBounds({ x: windowX, y: availY, width: windowWidth, height: availHeight });
 
-  if (!firstLayoutDone) {
-    firstLayoutDone = true;
-    win.show();
-  }
+  // 任意一次合法布局都恢复显示（应对 Explorer 重启 / 任务栏重排导致的瞬时 hide）
+  if (!firstLayoutDone) firstLayoutDone = true;
+  if (!win.isVisible()) win.show();
 
   // 主题：使用 nativeTheme 反推 isLight
   const isLight = !nativeTheme.shouldUseDarkColors;
